@@ -1431,7 +1431,8 @@ function rs_sekce_interni(): string {
     echo "<div class='rs-form-group' id='rs-int-seg-wrap' style='display:none'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-int-seg-list'></div></div>";
     echo "</div>";
 
-    // 3) Rezervující + Oddíl
+    // 3) Název rezervace + Rezervující + Oddíl
+    echo "<div class='rs-form-group'><label>Název rezervace *</label><input type='text' name='int_nazev' required placeholder='např. Schůzka, Besídka, Brigáda…'></div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Rezervující *</label><select name='int_rezervujici_id' required>";
     foreach ($authors as $u) {
@@ -1481,7 +1482,7 @@ function rs_sekce_interni(): string {
     // Přehled rezervací
     if ($rezervace) {
         echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Prostor</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
 
         foreach ($rezervace as $r) {
             $stav    = get_post_meta($r->ID,'rs_stav',true);
@@ -1491,6 +1492,7 @@ function rs_sekce_interni(): string {
             $rez_user = get_userdata($rez_uid);
             $oddil   = get_post_meta($r->ID,'rs_oddil',true);
             echo "<tr>";
+            echo "<td><strong>" . esc_html(get_post_meta($r->ID,'rs_nazev',true) ?: '–') . "</strong></td>";
             echo "<td>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
             $segs = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
             if ($segs) echo " <em style='font-size:12px;color:#777'>(" . implode(', ', array_map('get_the_title',$segs)) . ")</em>";
@@ -1561,10 +1563,13 @@ function rs_interni_zpracuj(string $action): string {
     if ($action === 'vytvorit') {
         $prostor_id   = (int)($_POST['int_prostor_id'] ?? 0);
         $seg_ids      = array_map('intval', (array)($_POST['int_segmenty'] ?? []));
+        $nazev        = sanitize_text_field($_POST['int_nazev'] ?? '');
         $poznamka     = sanitize_textarea_field($_POST['int_poznamka'] ?? '');
         $mode         = ($_POST['int_mode'] ?? 'jednorazova') === 'opakujici' ? 'opakujici' : 'jednorazova';
         $rezervujici  = (int)($_POST['int_rezervujici_id'] ?? $uid);
         $oddil        = sanitize_text_field($_POST['int_oddil'] ?? '');
+
+        if (!$nazev) return rs_alert('Zadejte název rezervace.','error');
 
         if (!$prostor_id) return rs_alert('Vyberte prostor.','error');
 
@@ -1579,6 +1584,7 @@ function rs_interni_zpracuj(string $action): string {
             if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
             $stav = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
             $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
+            update_post_meta($rid,'rs_nazev',$nazev);
             update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
             update_post_meta($rid,'rs_oddil',$oddil);
             return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici' ? 'Čeká na schválení (víkend/svátek/prázdniny – ale bude zdarma).' : 'Automaticky potvrzena.'));
@@ -1615,6 +1621,7 @@ function rs_interni_zpracuj(string $action): string {
                     if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
                         $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
                         $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
+                        update_post_meta($rid,'rs_nazev',$nazev);
                         update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
                         update_post_meta($rid,'rs_oddil',$oddil);
                         $created++;
