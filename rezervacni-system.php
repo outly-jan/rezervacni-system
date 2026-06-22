@@ -1,0 +1,1807 @@
+<?php
+/*
+Plugin Name: Rezervační systém
+Description: Rezervační systém prostor pro skautské středisko Chlumec.
+Version: 1.0
+Author: Honza & Claude
+*/
+
+if (!defined('ABSPATH')) exit;
+
+// ═══ POST TYPES ══════════════════════════════════════════════════════════════
+
+add_action('init', 'rs_registruj_post_types');
+function rs_registruj_post_types() {
+    register_post_type('rs_typ',      ['labels' => ['name' => 'Typy prostorů',  'singular_name' => 'Typ prostoru'],  'public' => false, 'show_ui' => false, 'supports' => ['title']]);
+    register_post_type('rs_prostor',  ['labels' => ['name' => 'Prostory',        'singular_name' => 'Prostor'],        'public' => false, 'show_ui' => false, 'supports' => ['title'], 'hierarchical' => true]);
+    register_post_type('rs_rezervace',['labels' => ['name' => 'Rezervace',       'singular_name' => 'Rezervace'],      'public' => false, 'show_ui' => false, 'supports' => ['title']]);
+}
+
+// ═══ ROLE SETUP ══════════════════════════════════════════════════════════════
+
+register_activation_hook(__FILE__, 'rs_aktivace');
+function rs_aktivace() {
+    if (!get_role('admin_rezervacniho_systemu'))
+        add_role('admin_rezervacniho_systemu', 'Admin rezervačního systému', ['read' => true, 'rs_admin' => true, 'rs_spravce' => true, 'rs_vedeni' => true]);
+    if (!get_role('spravce_rezervaci'))
+        add_role('spravce_rezervaci', 'Správce rezervací', ['read' => true, 'rs_spravce' => true, 'rs_vedeni' => true]);
+    foreach (['author', 'administrator'] as $r) {
+        $role = get_role($r);
+        if ($role) $role->add_cap('rs_vedeni');
+    }
+    foreach (['administrator', 'admin_rezervacniho_systemu'] as $r) {
+        $role = get_role($r);
+        if ($role) { $role->add_cap('rs_admin'); $role->add_cap('rs_spravce'); }
+    }
+    wp_schedule_event(strtotime('08:00:00'), 'daily', 'rs_cron_ucastnici');
+    flush_rewrite_rules();
+}
+
+register_deactivation_hook(__FILE__, function() { wp_clear_scheduled_hook('rs_cron_ucastnici'); });
+
+function rs_ma_pravo(string $cap): bool {
+    $u = wp_get_current_user();
+    if ($cap === 'admin')   return $u->has_cap('rs_admin');
+    if ($cap === 'spravce') return $u->has_cap('rs_spravce') || $u->has_cap('rs_admin');
+    if ($cap === 'vedeni')  return $u->has_cap('rs_vedeni')  || $u->has_cap('rs_spravce') || $u->has_cap('rs_admin');
+    return false;
+}
+
+// ═══ HELPERS ═════════════════════════════════════════════════════════════════
+
+function rs_alert(string $text, string $type = 'success'): string {
+    $map = ['success' => 'rs-ok', 'error' => 'rs-err', 'info' => 'rs-info', 'warning' => 'rs-warn'];
+    return "<div class='rs-alert " . ($map[$type] ?? 'rs-info') . "'>" . wp_kses_post($text) . "</div>";
+}
+
+function rs_token(): string { return bin2hex(random_bytes(20)); }
+
+function rs_je_vikend(string $d): bool    { return (int)date('N', strtotime($d)) >= 6; }
+function rs_je_svatek(string $d): bool    { return in_array(substr($d,0,10), get_option('rs_statni_svatky', []), true); }
+function rs_jsou_prazdniny(string $d): bool {
+    $ts = strtotime(substr($d,0,10));
+    foreach (get_option('rs_prazdniny', []) as $p)
+        if ($ts >= strtotime($p['od']) && $ts <= strtotime($p['do'])) return true;
+    return false;
+}
+function rs_potreba_schvaleni_interni(string $datum_od): bool {
+    return rs_je_vikend($datum_od) || rs_je_svatek($datum_od) || rs_jsou_prazdniny($datum_od);
+}
+
+function rs_je_volno(int $prostor_id, array $seg_ids, string $od, string $do, int $skip = 0): bool {
+    $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids']);
+    $od_ts = strtotime($od); $do_ts = strtotime($do);
+    foreach ($all as $rid) {
+        if ($rid === $skip) continue;
+        if (get_post_meta($rid, 'rs_stav', true) === 'zrusena') continue;
+        $r_od = strtotime(get_post_meta($rid, 'rs_datum_od', true));
+        $r_do = strtotime(get_post_meta($rid, 'rs_datum_do', true));
+        if ($od_ts >= $r_do || $do_ts <= $r_od) continue;
+        if ((int)get_post_meta($rid, 'rs_prostor_id', true) !== $prostor_id) continue;
+        $r_seg = (array)get_post_meta($rid, 'rs_segmenty_ids', true);
+        if (empty($seg_ids) || empty($r_seg) || array_intersect($seg_ids, $r_seg)) return false;
+    }
+    return true;
+}
+
+function rs_get_prostory(): array {
+    return get_posts(['post_type' => 'rs_prostor', 'post_parent' => 0, 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC', 'post_status' => 'publish']);
+}
+function rs_get_segmenty(int $pid): array {
+    return get_posts(['post_type' => 'rs_prostor', 'post_parent' => $pid, 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC', 'post_status' => 'publish']);
+}
+function rs_ma_segmenty(int $pid): bool { return get_post_meta($pid, 'rs_ma_segmenty', true) === '1'; }
+
+function rs_stav_badge(string $stav): string {
+    return match($stav) {
+        'cekajici'  => "<span class='rs-badge rs-badge-warn'>Čeká na schválení</span>",
+        'potvrzena' => "<span class='rs-badge rs-badge-ok'>Potvrzena</span>",
+        'zrusena'   => "<span class='rs-badge rs-badge-err'>Zrušena</span>",
+        default     => esc_html($stav),
+    };
+}
+
+function rs_rez_jmeno(int $id): string {
+    if (get_post_meta($id, 'rs_rez_typ', true) === 'pravnicka')
+        return get_post_meta($id, 'rs_nazev', true) ?: '–';
+    return trim(get_post_meta($id, 'rs_jmeno', true) . ' ' . get_post_meta($id, 'rs_prijmeni', true)) ?: '–';
+}
+
+function rs_vypocti_cenu(int $prostor_id, array $seg_ids, int $pocet_lidi, string $od, string $do): float {
+    $ids = empty($seg_ids) ? [$prostor_id] : $seg_ids;
+    $total = 0.0;
+    foreach ($ids as $iid) {
+        $za_celek = (float)get_post_meta($iid, 'rs_cena_za_celek', true);
+        if ($za_celek > 0) { $total += $za_celek; continue; }
+        $za_osobu = (float)get_post_meta($iid, 'rs_cena_za_osobu', true);
+        $total += $za_osobu * $pocet_lidi;
+    }
+    return $total;
+}
+
+// ═══ ARES ════════════════════════════════════════════════════════════════════
+
+add_action('wp_ajax_nopriv_rs_ares', 'rs_ares_ajax');
+add_action('wp_ajax_rs_ares',        'rs_ares_ajax');
+function rs_ares_ajax() {
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'rs_public')) wp_send_json_error('Unauthorized');
+    $ico = str_pad(preg_replace('/\D/', '', sanitize_text_field($_POST['ico'] ?? '')), 8, '0', STR_PAD_LEFT);
+    if (strlen($ico) !== 8) wp_send_json_error('Zadejte platné IČO');
+    $resp = wp_remote_get('https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/' . $ico, ['timeout' => 8, 'headers' => ['Accept' => 'application/json']]);
+    if (is_wp_error($resp) || wp_remote_retrieve_response_code($resp) !== 200) wp_send_json_error('Subjekt nenalezen v ARES');
+    $d = json_decode(wp_remote_retrieve_body($resp), true);
+    if (!$d) wp_send_json_error('Chyba parsování');
+    $a = $d['sidlo'] ?? [];
+    $sidlo = $a['textovaAdresa'] ?? trim(($a['nazevUlice'] ?? '') . ' ' . ($a['cisloDomovni'] ?? '') . (isset($a['cisloOrientacni']) ? '/' . $a['cisloOrientacni'] : '') . ', ' . ($a['psc'] ?? '') . ' ' . ($a['nazevObce'] ?? ''));
+    wp_send_json_success(['nazev' => $d['obchodniJmeno'] ?? '', 'sidlo' => trim($sidlo, ' ,')]);
+}
+
+// ═══ EMAILY ══════════════════════════════════════════════════════════════════
+
+function rs_spravci_emaily(): array {
+    $users = get_users(['role__in' => ['spravce_rezervaci', 'admin_rezervacniho_systemu', 'administrator']]);
+    return array_unique(array_filter(array_map(fn($u) => $u->user_email, $users)));
+}
+
+function rs_mail(string $to, string $subj, string $body) {
+    wp_mail($to, $subj, $body, ['Content-Type: text/plain; charset=UTF-8']);
+}
+
+function rs_notifikuj_nova(int $id) {
+    $email   = get_post_meta($id, 'rs_email', true);
+    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+    $od      = get_post_meta($id, 'rs_datum_od', true);
+    $do_     = get_post_meta($id, 'rs_datum_do', true);
+    $token   = get_post_meta($id, 'rs_token', true);
+    $url     = home_url('/?rs_sprava=' . $token);
+
+    if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$prostor}",
+        "Dobrý den,\n\nVaše žádost o rezervaci prostoru {$prostor} (termín: {$od} – {$do_}) byla přijata a čeká na schválení.\n\nOdkaz pro správu rezervace (uschovejte si jej):\n{$url}\n\nSkautské středisko Chlumec");
+
+    foreach (rs_spravci_emaily() as $se)
+        rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
+            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nŽadatel: " . rs_rez_jmeno($id) . "\nTermín: {$od} – {$do_}\n\nZpracujte ji v administraci rezervačního systému.");
+}
+
+function rs_notifikuj_potvrzeni(int $id) {
+    $email = get_post_meta($id, 'rs_email', true);
+    if (!$email) return;
+    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+    $cena    = (float)get_post_meta($id, 'rs_cena_celkem', true);
+    $token   = get_post_meta($id, 'rs_token', true);
+    rs_mail($email, "Rezervace potvrzena – {$prostor}",
+        "Dobrý den,\n\nVaše rezervace prostoru {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena,0,',',' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+}
+
+function rs_notifikuj_zruseni(int $id) {
+    $email = get_post_meta($id, 'rs_email', true);
+    if (!$email) return;
+    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+    rs_mail($email, "Rezervace zrušena – {$prostor}",
+        "Dobrý den,\n\nVaše rezervace prostoru {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla zrušena.\n\nSkautské středisko Chlumec");
+}
+
+// Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
+add_action('rs_cron_ucastnici', 'rs_cron_upozorneni_ucastnici');
+function rs_cron_upozorneni_ucastnici() {
+    if (!get_option('rs_vzdusne_aktivni')) return;
+    $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => 'rs_stav', 'value' => 'potvrzena']]]);
+    foreach ($all as $id) {
+        $email     = get_post_meta($id, 'rs_email', true);
+        $ucastnici = get_post_meta($id, 'rs_ucastnici', true);
+        if (!$email || !empty($ucastnici)) continue;
+        $od_ts  = strtotime(get_post_meta($id, 'rs_datum_od', true));
+        $diff   = $od_ts - time();
+        $days   = (int)($diff / 86400);
+        if ($days !== 7 && $days !== 1) continue;
+        $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+        $token   = get_post_meta($id, 'rs_token', true);
+        rs_mail($email, "Upozornění: vyplňte seznam ubytovaných – {$prostor}",
+            "Dobrý den,\n\nVaše rezervace prostoru {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . ".\n\nProsím vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+    }
+}
+
+// ═══ CSS ═════════════════════════════════════════════════════════════════════
+
+function rs_css() { ?>
+<style>
+.rs-wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px}
+.rs-menu{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0;border-bottom:3px solid #1a5c2a}
+.rs-menu button{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;white-space:nowrap;transition:background .15s;margin-bottom:-1px}
+.rs-menu button:hover{background:#e0e0e0}
+.rs-menu button.rs-active{background:#1a5c2a;color:#fff;border-color:#1a5c2a;font-weight:600}
+.rs-panels{padding:20px;background:#fff;border:1px solid #1a5c2a;border-top:none}
+.rs-panels>div{display:none}.rs-panels>div.rs-active{display:block}
+.rs-card{background:#fafafa;border:1px solid #ddd;border-radius:4px;padding:18px 20px;margin-bottom:20px}
+.rs-card-title{margin:0 0 14px;padding-bottom:8px;border-bottom:2px solid #1a5c2a;color:#1a5c2a;font-size:15px;font-weight:600}
+.rs-section-title{margin:0 0 20px;font-size:18px;color:#222}
+.rs-btn{display:inline-block;padding:6px 14px;font-size:13px;font-weight:500;border:none;border-radius:3px;cursor:pointer;text-decoration:none;line-height:1.6;transition:filter .15s;vertical-align:middle}
+.rs-btn:hover{filter:brightness(.88)}
+.rs-btn-primary{background:#1a5c2a;color:#fff!important}
+.rs-btn-danger{background:#d63638;color:#fff!important}
+.rs-btn-success{background:#2e7d32;color:#fff!important}
+.rs-btn-secondary{background:#757575;color:#fff!important}
+.rs-btn-sm{padding:3px 9px;font-size:12px}
+.rs-btn-row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.rs-alert{padding:10px 14px;border-radius:3px;margin-bottom:16px;font-size:13px;border-left:4px solid}
+.rs-ok{background:#f0faf0;border-color:#2e7d32;color:#1b5e20}
+.rs-err{background:#fff0f0;border-color:#d63638;color:#7b1c1e}
+.rs-info{background:#e8f4fb;border-color:#0073aa;color:#004e73}
+.rs-warn{background:#fff8e1;border-color:#f57c00;color:#7a4100}
+.rs-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.rs-table th{background:#e8f2ea;color:#222;border:1px solid #b8d4be;padding:7px 10px;text-align:left;font-weight:600}
+.rs-table td{border:1px solid #ddd;padding:6px 10px;vertical-align:middle}
+.rs-table tr:nth-child(even) td{background:#f7f7f7}
+.rs-table tr:hover td{background:#edf4ea}
+.rs-form-group{margin-bottom:14px}
+.rs-form-group>label{display:block;font-weight:600;margin-bottom:4px;font-size:13px;color:#444}
+.rs-wrap input[type=text],.rs-wrap input[type=number],.rs-wrap input[type=date],.rs-wrap input[type=time],.rs-wrap input[type=email],.rs-wrap input[type=tel],.rs-wrap textarea,.rs-wrap select{padding:5px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px;line-height:1.5;color:#2c3338;background:#fff;box-sizing:border-box;vertical-align:middle}
+.rs-form-group input,.rs-form-group select,.rs-form-group textarea{width:100%;max-width:420px}
+.rs-form-group textarea{max-width:100%;resize:vertical}
+.rs-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.rs-form-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rs-badge{border-radius:3px;padding:2px 8px;font-size:12px;font-weight:500}
+.rs-badge-warn{background:#fff3cd;color:#856404;border:1px solid #ffc107}
+.rs-badge-ok{background:#d1e7dd;color:#0a5b2e;border:1px solid #a3cfbb}
+.rs-badge-err{background:#f8d7da;color:#842029;border:1px solid #f5c2c7}
+.rs-badge-info{background:#cfe2ff;color:#084298;border:1px solid #b6d4fe}
+.rs-segment-box{border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:10px;background:#fff}
+.rs-foto-preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.rs-foto-preview img{width:80px;height:60px;object-fit:cover;border-radius:3px;border:1px solid #ddd}
+.rs-foto-item{position:relative}
+.rs-foto-item .rs-foto-del{position:absolute;top:-4px;right:-4px;background:#d63638;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;line-height:16px;text-align:center;padding:0}
+.rs-kal-table{width:100%;border-collapse:collapse;font-size:13px}
+.rs-kal-table th{background:#1a5c2a;color:#fff;padding:8px;text-align:center}
+.rs-kal-table td{border:1px solid #ddd;padding:6px;text-align:center;vertical-align:top;min-width:40px}
+.rs-kal-free{background:#d4edda;color:#155724;font-size:11px;border-radius:2px;padding:1px 4px}
+.rs-kal-busy{background:#f8d7da;color:#721c24;font-size:11px;border-radius:2px;padding:1px 4px}
+.rs-kal-partial{background:#fff3cd;color:#856404;font-size:11px;border-radius:2px;padding:1px 4px}
+@media(max-width:640px){.rs-menu{flex-direction:column;border-bottom:none}.rs-menu button{border-radius:3px;border-bottom:1px solid #ccc;margin-bottom:2px}.rs-panels{border-top:3px solid #1a5c2a}.rs-form-group input,.rs-form-group select,.rs-form-group textarea{max-width:100%}}
+</style>
+<?php }
+
+// ═══ JS ══════════════════════════════════════════════════════════════════════
+
+function rs_js_tabs() { ?>
+<script>
+function rsTab(id, btn) {
+    document.querySelectorAll('.rs-panels>div').forEach(d=>{d.classList.remove('rs-active')});
+    document.querySelectorAll('.rs-menu button').forEach(b=>{b.classList.remove('rs-active')});
+    var p=document.getElementById('rs-panel-'+id);
+    if(p){p.classList.add('rs-active');}
+    if(btn){btn.classList.add('rs-active');}
+}
+document.addEventListener('DOMContentLoaded',function(){
+    var first=document.querySelector('.rs-menu button');
+    if(first){first.click();}
+    var hash=location.hash;
+    if(hash.startsWith('#rs-')){
+        var btn=document.querySelector('.rs-menu button[data-tab="'+hash.slice(4)+'"]');
+        if(btn)btn.click();
+    }
+});
+</script>
+<?php }
+
+// ═══ ADMIN SHORTCODE ═════════════════════════════════════════════════════════
+
+add_shortcode('rs_admin', 'rs_admin_sc');
+function rs_admin_sc(): string {
+    if (!rs_ma_pravo('vedeni')) return '<p>Nemáš oprávnění k rezervačnímu systému.</p>';
+    if (rs_ma_pravo('admin') || rs_ma_pravo('spravce')) wp_enqueue_media();
+
+    ob_start();
+    rs_css();
+    echo "<div class='rs-wrap'>";
+
+    // Navigation
+    echo "<div class='rs-menu'>";
+    if (rs_ma_pravo('admin')) {
+        echo "<button data-tab='typy'    onclick='rsTab(\"typy\",this)'   >Typy prostorů</button>";
+        echo "<button data-tab='prostory' onclick='rsTab(\"prostory\",this)'>Prostory</button>";
+        echo "<button data-tab='prazdniny' onclick='rsTab(\"prazdniny\",this)'>Prázdniny & Svátky</button>";
+        echo "<button data-tab='ceny'    onclick='rsTab(\"ceny\",this)'   >Ceny</button>";
+        echo "<button data-tab='nastaveni' onclick='rsTab(\"nastaveni\",this)'>Nastavení</button>";
+    }
+    if (rs_ma_pravo('spravce')) echo "<button data-tab='rezervace' onclick='rsTab(\"rezervace\",this)'>Správa rezervací</button>";
+    if (rs_ma_pravo('vedeni'))  echo "<button data-tab='interni'   onclick='rsTab(\"interni\",this)'  >Interní rezervace</button>";
+    echo "</div>";
+
+    // Panels
+    echo "<div class='rs-panels'>";
+    if (rs_ma_pravo('admin')) {
+        echo "<div id='rs-panel-typy'>"     . rs_sekce_typy()     . "</div>";
+        echo "<div id='rs-panel-prostory'>" . rs_sekce_prostory() . "</div>";
+        echo "<div id='rs-panel-prazdniny'>". rs_sekce_prazdniny(). "</div>";
+        echo "<div id='rs-panel-ceny'>"     . rs_sekce_ceny()     . "</div>";
+        echo "<div id='rs-panel-nastaveni'>". rs_sekce_nastaveni(). "</div>";
+    }
+    if (rs_ma_pravo('spravce')) echo "<div id='rs-panel-rezervace'>". rs_sekce_rezervace() . "</div>";
+    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-interni'>"  . rs_sekce_interni()   . "</div>";
+    echo "</div>";
+
+    echo "</div>"; // .rs-wrap
+    rs_js_tabs();
+    return ob_get_clean();
+}
+
+// ═══ SEKCE: TYPY PROSTORŮ ════════════════════════════════════════════════════
+
+function rs_sekce_typy(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_typy_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_typy')) return rs_alert('Neplatný token.','error');
+        $action = sanitize_key($_POST['rs_typy_action']);
+
+        if ($action === 'pridat') {
+            $nazev = sanitize_text_field($_POST['typ_nazev'] ?? '');
+            $popis = sanitize_textarea_field($_POST['typ_popis'] ?? '');
+            if (!$nazev) { $zprava = rs_alert('Zadejte název.','error'); }
+            else {
+                $existing = get_posts(['post_type'=>'rs_typ','title'=>$nazev,'numberposts'=>1,'fields'=>'ids']);
+                if ($existing) $zprava = rs_alert('Typ s tímto názvem již existuje.','error');
+                else { wp_insert_post(['post_type'=>'rs_typ','post_title'=>$nazev,'post_content'=>$popis,'post_status'=>'publish']); $zprava = rs_alert('Typ přidán.'); }
+            }
+        } elseif ($action === 'upravit') {
+            $id    = (int)($_POST['typ_id'] ?? 0);
+            $nazev = sanitize_text_field($_POST['typ_nazev'] ?? '');
+            $popis = sanitize_textarea_field($_POST['typ_popis'] ?? '');
+            if ($id && $nazev) { wp_update_post(['ID'=>$id,'post_title'=>$nazev,'post_content'=>$popis]); $zprava = rs_alert('Typ upraven.'); }
+        } elseif ($action === 'smazat') {
+            $id = (int)($_POST['typ_id'] ?? 0);
+            if ($id) {
+                $pouzit = get_posts(['post_type'=>'rs_prostor','numberposts'=>1,'fields'=>'ids','meta_query'=>[['key'=>'rs_typ_id','value'=>$id]]]);
+                if ($pouzit) $zprava = rs_alert('Nelze smazat – existují prostory tohoto typu.','error');
+                else { wp_delete_post($id, true); $zprava = rs_alert('Typ smazán.'); }
+            }
+        }
+    }
+
+    $typy = get_posts(['post_type'=>'rs_typ','numberposts'=>-1,'orderby'=>'title','order'=>'ASC']);
+    $edit_id = (int)($_GET['rs_edit_typ'] ?? 0);
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Typy prostorů</h3>{$zprava}";
+
+    // Form: add / edit
+    $edit = $edit_id ? get_post($edit_id) : null;
+    echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($edit ? '✏️ Upravit typ' : '➕ Přidat typ') . "</h4>";
+    echo "<form method='post'>" . wp_nonce_field('rs_typy','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_typy_action' value='" . ($edit ? 'upravit' : 'pridat') . "'>";
+    if ($edit) echo "<input type='hidden' name='typ_id' value='{$edit->ID}'>";
+    echo "<div class='rs-form-group'><label>Název typu *</label><input type='text' name='typ_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
+    echo "<div class='rs-form-group'><label>Popis (nepovinné)</label><textarea name='typ_popis' rows='2'>" . esc_textarea($edit ? $edit->post_content : '') . "</textarea></div>";
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit' : '➕ Přidat') . "</button>";
+    if ($edit) echo "<a href='" . esc_url(remove_query_arg('rs_edit_typ')) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
+    echo "</div></form></div>";
+
+    // List
+    if ($typy) {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled typů</h4><table class='rs-table'><thead><tr><th>Název</th><th>Popis</th><th>Akcí</th></tr></thead><tbody>";
+        foreach ($typy as $t) {
+            echo "<tr><td>" . esc_html($t->post_title) . "</td><td>" . esc_html($t->post_content) . "</td><td>";
+            echo "<a href='" . esc_url(add_query_arg('rs_edit_typ',$t->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
+            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Opravdu smazat?\")'>" . wp_nonce_field('rs_typy','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_typy_action' value='smazat'><input type='hidden' name='typ_id' value='{$t->ID}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form>";
+            echo "</td></tr>";
+        }
+        echo "</tbody></table></div>";
+    }
+    return ob_get_clean();
+}
+
+// ═══ SEKCE: PROSTORY & SEGMENTY ══════════════════════════════════════════════
+
+function rs_sekce_prostory(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_prostor_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce_prostor'] ?? '', 'rs_prostor')) return rs_alert('Neplatný token.','error');
+        $action = sanitize_key($_POST['rs_prostor_action']);
+        $zprava = rs_prostor_zpracuj($action);
+    }
+
+    $prostory = rs_get_prostory();
+    $typy     = get_posts(['post_type'=>'rs_typ','numberposts'=>-1,'orderby'=>'title','order'=>'ASC']);
+    $edit_id  = (int)($_GET['rs_edit_prostor'] ?? 0);
+    $edit     = $edit_id ? get_post($edit_id) : null;
+    $edit_seg_id = (int)($_GET['rs_edit_seg'] ?? 0);
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Prostory & Segmenty</h3>{$zprava}";
+
+    // === Form: prostor ===
+    $ma_seg = $edit ? (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1') : false;
+    echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($edit ? '✏️ Upravit prostor' : '➕ Přidat prostor') . "</h4>";
+    echo "<form method='post' enctype='multipart/form-data'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+    echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit ? 'upravit_prostor' : 'pridat_prostor') . "'>";
+    if ($edit) echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
+
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Název prostoru *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
+    echo "<div class='rs-form-group'><label>Typ prostoru</label><select name='prostor_typ'>";
+    echo "<option value=''>– bez typu –</option>";
+    foreach ($typy as $t) {
+        $sel = ($edit && get_post_meta($edit->ID,'rs_typ_id',true) == $t->ID) ? 'selected' : '';
+        echo "<option value='{$t->ID}' {$sel}>" . esc_html($t->post_title) . "</option>";
+    }
+    echo "</select></div></div>";
+
+    echo "<div class='rs-form-group'><label>Popis</label><textarea name='prostor_popis' rows='3'>" . esc_textarea($edit ? $edit->post_content : '') . "</textarea></div>";
+
+    // Segmenty toggle
+    $ma_seg_checked = $ma_seg ? 'checked' : '';
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='prostor_ma_segmenty' {$ma_seg_checked} onchange='rsToggleSegmenty(this)'> Prostor má segmenty (místnosti)</label></div>";
+
+    // Bez segmentů: rozloha, kapacita, doplňující info
+    $seg_none_style = $ma_seg ? "style='display:none'" : '';
+    echo "<div id='rs-noseg' {$seg_none_style}>";
+    $roz   = esc_attr($edit ? get_post_meta($edit->ID,'rs_rozloha',true) : '');
+    $kap   = esc_attr($edit ? get_post_meta($edit->ID,'rs_kapacita',true) : '');
+    $dop   = esc_textarea($edit ? get_post_meta($edit->ID,'rs_doplnujici',true) : '');
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Rozloha (m²)</label><input type='number' name='prostor_rozloha' value='{$roz}' min='0' style='width:100px'></div>";
+    echo "<div class='rs-form-group'><label>Kapacita (osob k přenocování)</label><input type='number' name='prostor_kapacita' value='{$kap}' min='0' style='width:100px'></div>";
+    echo "</div>";
+    echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='prostor_doplnujici' rows='3'>{$dop}</textarea></div>";
+    echo "</div>"; // #rs-noseg
+
+    // Fotky
+    $fotky = $edit ? (array)get_post_meta($edit->ID,'rs_fotky',true) : [];
+    echo rs_foto_field('prostor', $fotky);
+
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit změny' : '➕ Přidat prostor') . "</button>";
+    if ($edit) echo "<a href='" . esc_url(remove_query_arg(['rs_edit_prostor','rs_edit_seg'])) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
+    echo "</div></form></div>";
+
+    // === Segmenty přidání (pokud prostor má segmenty) ===
+    if ($edit && $ma_seg) {
+        $segmenty = rs_get_segmenty($edit->ID);
+        $edit_seg = $edit_seg_id ? get_post($edit_seg_id) : null;
+
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Segmenty prostoru: " . esc_html($edit->post_title) . "</h4>";
+
+        // Form: add/edit segment
+        echo "<form method='post'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+        echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit_seg ? 'upravit_segment' : 'pridat_segment') . "'>";
+        echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
+        if ($edit_seg) echo "<input type='hidden' name='segment_id' value='{$edit_seg->ID}'>";
+
+        $s_roz = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_rozloha',true) : '');
+        $s_kap = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_kapacita',true) : '');
+        $s_dop = esc_textarea($edit_seg ? get_post_meta($edit_seg->ID,'rs_doplnujici',true) : '');
+        $s_fotky = $edit_seg ? (array)get_post_meta($edit_seg->ID,'rs_fotky',true) : [];
+
+        echo "<h5>" . ($edit_seg ? '✏️ Upravit segment' : '➕ Přidat segment') . "</h5>";
+        echo "<div class='rs-form-group'><label>Název segmentu *</label><input type='text' name='segment_nazev' value='" . esc_attr($edit_seg ? $edit_seg->post_title : '') . "' required></div>";
+        echo "<div class='rs-form-group'><label>Popis</label><textarea name='segment_popis' rows='2'>" . esc_textarea($edit_seg ? $edit_seg->post_content : '') . "</textarea></div>";
+        echo "<div class='rs-form-row'>";
+        echo "<div class='rs-form-group'><label>Rozloha (m²)</label><input type='number' name='segment_rozloha' value='{$s_roz}' min='0' style='width:100px'></div>";
+        echo "<div class='rs-form-group'><label>Kapacita (osob)</label><input type='number' name='segment_kapacita' value='{$s_kap}' min='0' style='width:100px'></div>";
+        echo "</div>";
+        echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='segment_doplnujici' rows='2'>{$s_dop}</textarea></div>";
+        echo rs_foto_field('segment', $s_fotky);
+        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit_seg ? '💾 Uložit segment' : '➕ Přidat segment') . "</button>";
+        if ($edit_seg) echo "<a href='" . esc_url(remove_query_arg('rs_edit_seg')) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
+        echo "</div></form>";
+
+        // List segments
+        if ($segmenty) {
+            echo "<table class='rs-table' style='margin-top:16px'><thead><tr><th>Název</th><th>Rozloha</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+            foreach ($segmenty as $seg) {
+                echo "<tr><td>" . esc_html($seg->post_title) . "</td>";
+                echo "<td>" . esc_html(get_post_meta($seg->ID,'rs_rozloha',true)) . " m²</td>";
+                echo "<td>" . esc_html(get_post_meta($seg->ID,'rs_kapacita',true)) . " os.</td>";
+                echo "<td>";
+                echo "<a href='" . esc_url(add_query_arg(['rs_edit_prostor'=>$edit->ID,'rs_edit_seg'=>$seg->ID])) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat segment?\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+                echo "<input type='hidden' name='rs_prostor_action' value='smazat_segment'>";
+                echo "<input type='hidden' name='segment_id' value='{$seg->ID}'>";
+                echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form>";
+                echo "</td></tr>";
+            }
+            echo "</tbody></table>";
+        } else {
+            echo "<p style='color:#777;font-size:13px'>Zatím žádné segmenty.</p>";
+        }
+        echo "</div>"; // card
+    }
+
+    // === Seznam prostorů ===
+    if ($prostory) {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostorů</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+        foreach ($prostory as $p) {
+            $typ_id  = get_post_meta($p->ID,'rs_typ_id',true);
+            $typ_n   = $typ_id ? get_the_title($typ_id) : '–';
+            $segs    = rs_get_segmenty($p->ID);
+            $kap     = get_post_meta($p->ID,'rs_kapacita',true);
+            echo "<tr>";
+            echo "<td>" . esc_html($p->post_title) . "</td>";
+            echo "<td>" . esc_html($typ_n) . "</td>";
+            echo "<td>" . (rs_ma_segmenty($p->ID) ? count($segs) . ' segmentů' : '–') . "</td>";
+            echo "<td>" . ($kap ? esc_html($kap).' os.' : '–') . "</td>";
+            echo "<td>";
+            echo "<a href='" . esc_url(add_query_arg('rs_edit_prostor',$p->ID,remove_query_arg('rs_edit_seg'))) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
+            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat prostor? Možné jen bez rezervací.\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+            echo "<input type='hidden' name='rs_prostor_action' value='smazat_prostor'><input type='hidden' name='prostor_id' value='{$p->ID}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form>";
+            echo "</td></tr>";
+        }
+        echo "</tbody></table></div>";
+    }
+
+    // JS pro toggle segmentů a WP media uploader
+    ?>
+    <script>
+    function rsToggleSegmenty(cb){
+        document.getElementById('rs-noseg').style.display = cb.checked ? 'none' : '';
+    }
+    function rsFotoInit(fieldName) {
+        var btn = document.getElementById('rs-foto-btn-'+fieldName);
+        if (!btn) return;
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            var frame = wp.media({title:'Vyberte fotky',button:{text:'Použít'},multiple:true});
+            frame.on('select', function(){
+                frame.state().get('selection').each(function(att){
+                    var id = att.id;
+                    var url = att.attributes.url || (att.attributes.sizes && att.attributes.sizes.thumbnail ? att.attributes.sizes.thumbnail.url : att.attributes.url);
+                    if (document.getElementById('rs-foto-id-'+fieldName+'-'+id)) return;
+                    var wrap = document.getElementById('rs-foto-preview-'+fieldName);
+                    var item = document.createElement('div');
+                    item.className = 'rs-foto-item';
+                    item.id = 'rs-foto-id-'+fieldName+'-'+id;
+                    item.innerHTML = '<img src="'+url+'"><button class="rs-foto-del" type="button" onclick="rsFotoDel(\''+fieldName+'\','+id+',this.parentNode)">×</button><input type="hidden" name="fotky_'+fieldName+'[]" value="'+id+'">';
+                    wrap.appendChild(item);
+                });
+            });
+            frame.open();
+        });
+    }
+    function rsFotoDel(field, id, el){ el.remove(); }
+    document.addEventListener('DOMContentLoaded', function(){
+        rsFotoInit('prostor');
+        rsFotoInit('segment');
+    });
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_foto_field(string $field, array $existing_ids): string {
+    ob_start();
+    echo "<div class='rs-form-group'><label>Fotky</label>";
+    echo "<div id='rs-foto-preview-{$field}' class='rs-foto-preview'>";
+    foreach ($existing_ids as $att_id) {
+        $att_id = (int)$att_id;
+        if (!$att_id) continue;
+        $url = wp_get_attachment_image_url($att_id, 'thumbnail') ?: wp_get_attachment_url($att_id);
+        if (!$url) continue;
+        echo "<div class='rs-foto-item' id='rs-foto-id-{$field}-{$att_id}'>";
+        echo "<img src='" . esc_url($url) . "'>";
+        echo "<button class='rs-foto-del' type='button' onclick='rsFotoDel(\"{$field}\",{$att_id},this.parentNode)'>×</button>";
+        echo "<input type='hidden' name='fotky_{$field}[]' value='{$att_id}'>";
+        echo "</div>";
+    }
+    echo "</div>";
+    echo "<button type='button' id='rs-foto-btn-{$field}' class='rs-btn rs-btn-secondary rs-btn-sm' style='margin-top:6px'>📷 Přidat fotky</button>";
+    echo "</div>";
+    return ob_get_clean();
+}
+
+function rs_prostor_zpracuj(string $action): string {
+    switch ($action) {
+        case 'pridat_prostor': {
+            $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
+            if (!$nazev) return rs_alert('Zadejte název prostoru.','error');
+            $ex = get_posts(['post_type'=>'rs_prostor','title'=>$nazev,'post_parent'=>0,'numberposts'=>1,'fields'=>'ids']);
+            if ($ex) return rs_alert('Prostor s tímto názvem již existuje.','error');
+            $ma_seg = isset($_POST['prostor_ma_segmenty']) ? '1' : '0';
+            $id = wp_insert_post(['post_type'=>'rs_prostor','post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['prostor_popis']??''),'post_status'=>'publish']);
+            update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
+            update_post_meta($id,'rs_ma_segmenty',$ma_seg);
+            if ($ma_seg === '0') {
+                update_post_meta($id,'rs_rozloha',  (int)($_POST['prostor_rozloha']??0));
+                update_post_meta($id,'rs_kapacita', (int)($_POST['prostor_kapacita']??0));
+                update_post_meta($id,'rs_doplnujici',sanitize_textarea_field($_POST['prostor_doplnujici']??''));
+            }
+            rs_uloz_fotky($id, 'prostor');
+            return rs_alert('Prostor přidán. <a href="' . esc_url(add_query_arg('rs_edit_prostor',$id)) . '">Přejít na úpravu / přidat segmenty</a>');
+        }
+        case 'upravit_prostor': {
+            $id = (int)($_POST['prostor_id'] ?? 0);
+            if (!$id) return '';
+            $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
+            wp_update_post(['ID'=>$id,'post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['prostor_popis']??'')]);
+            update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
+            $ma_seg = isset($_POST['prostor_ma_segmenty']) ? '1' : '0';
+            update_post_meta($id,'rs_ma_segmenty',$ma_seg);
+            if ($ma_seg === '0') {
+                update_post_meta($id,'rs_rozloha',  (int)($_POST['prostor_rozloha']??0));
+                update_post_meta($id,'rs_kapacita', (int)($_POST['prostor_kapacita']??0));
+                update_post_meta($id,'rs_doplnujici',sanitize_textarea_field($_POST['prostor_doplnujici']??''));
+            }
+            rs_uloz_fotky($id, 'prostor');
+            return rs_alert('Prostor uložen.');
+        }
+        case 'smazat_prostor': {
+            $id = (int)($_POST['prostor_id'] ?? 0);
+            if (!$id) return '';
+            $rez = get_posts(['post_type'=>'rs_rezervace','numberposts'=>1,'fields'=>'ids','meta_query'=>[['key'=>'rs_prostor_id','value'=>$id]]]);
+            if ($rez) return rs_alert('Nelze smazat – prostor má rezervace.','error');
+            foreach (rs_get_segmenty($id) as $seg) wp_delete_post($seg->ID, true);
+            wp_delete_post($id, true);
+            return rs_alert('Prostor smazán.');
+        }
+        case 'pridat_segment': {
+            $pid   = (int)($_POST['prostor_id'] ?? 0);
+            $nazev = sanitize_text_field($_POST['segment_nazev'] ?? '');
+            if (!$pid || !$nazev) return rs_alert('Chybí data.','error');
+            $ex = get_posts(['post_type'=>'rs_prostor','title'=>$nazev,'post_parent'=>$pid,'numberposts'=>1,'fields'=>'ids']);
+            if ($ex) return rs_alert('Segment s tímto názvem již existuje.','error');
+            $sid = wp_insert_post(['post_type'=>'rs_prostor','post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['segment_popis']??''),'post_parent'=>$pid,'post_status'=>'publish']);
+            update_post_meta($sid,'rs_rozloha',  (int)($_POST['segment_rozloha']??0));
+            update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
+            update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
+            rs_uloz_fotky($sid, 'segment');
+            return rs_alert('Segment přidán.');
+        }
+        case 'upravit_segment': {
+            $sid = (int)($_POST['segment_id'] ?? 0);
+            if (!$sid) return '';
+            wp_update_post(['ID'=>$sid,'post_title'=>sanitize_text_field($_POST['segment_nazev']??''),'post_content'=>sanitize_textarea_field($_POST['segment_popis']??'')]);
+            update_post_meta($sid,'rs_rozloha',  (int)($_POST['segment_rozloha']??0));
+            update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
+            update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
+            rs_uloz_fotky($sid, 'segment');
+            return rs_alert('Segment uložen.');
+        }
+        case 'smazat_segment': {
+            $sid = (int)($_POST['segment_id'] ?? 0);
+            if (!$sid) return '';
+            $rez = get_posts(['post_type'=>'rs_rezervace','numberposts'=>1,'fields'=>'ids','meta_query'=>[['key'=>'rs_segmenty_ids','value'=>$sid,'compare'=>'LIKE']]]);
+            if ($rez) return rs_alert('Nelze smazat – segment má rezervace.','error');
+            wp_delete_post($sid, true);
+            return rs_alert('Segment smazán.');
+        }
+    }
+    return '';
+}
+
+function rs_uloz_fotky(int $post_id, string $field) {
+    $ids = array_map('intval', (array)($_POST['fotky_' . $field] ?? []));
+    update_post_meta($post_id, 'rs_fotky', array_filter($ids));
+}
+
+// ═══ SEKCE: PRÁZDNINY & SVÁTKY ═══════════════════════════════════════════════
+
+function rs_sekce_prazdniny(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_praz_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_prazdniny')) return rs_alert('Neplatný token.','error');
+        $action = sanitize_key($_POST['rs_praz_action']);
+
+        if ($action === 'pridat_svatek') {
+            $datum = sanitize_text_field($_POST['svatek_datum'] ?? '');
+            $nazev = sanitize_text_field($_POST['svatek_nazev'] ?? '');
+            if ($datum && $nazev) {
+                $svatky = get_option('rs_statni_svatky_data', []);
+                $svatky[$datum] = $nazev;
+                update_option('rs_statni_svatky_data', $svatky);
+                update_option('rs_statni_svatky', array_keys($svatky));
+                $zprava = rs_alert('Svátek přidán.');
+            }
+        } elseif ($action === 'smazat_svatek') {
+            $datum = sanitize_text_field($_POST['svatek_datum'] ?? '');
+            $svatky = get_option('rs_statni_svatky_data', []);
+            unset($svatky[$datum]);
+            update_option('rs_statni_svatky_data', $svatky);
+            update_option('rs_statni_svatky', array_keys($svatky));
+            $zprava = rs_alert('Svátek odstraněn.');
+        } elseif ($action === 'pridat_prazdniny') {
+            $nazev = sanitize_text_field($_POST['praz_nazev'] ?? '');
+            $od    = sanitize_text_field($_POST['praz_od'] ?? '');
+            $do_   = sanitize_text_field($_POST['praz_do'] ?? '');
+            if ($nazev && $od && $do_) {
+                $prazdniny = get_option('rs_prazdniny', []);
+                $prazdniny[] = ['nazev' => $nazev, 'od' => $od, 'do' => $do_];
+                update_option('rs_prazdniny', $prazdniny);
+                $zprava = rs_alert('Prázdniny přidány.');
+            }
+        } elseif ($action === 'smazat_prazdniny') {
+            $idx = (int)($_POST['praz_idx'] ?? -1);
+            $prazdniny = get_option('rs_prazdniny', []);
+            unset($prazdniny[$idx]);
+            update_option('rs_prazdniny', array_values($prazdniny));
+            $zprava = rs_alert('Prázdniny odstraněny.');
+        }
+    }
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Prázdniny & Státní svátky</h3>{$zprava}";
+
+    // Státní svátky
+    $svatky = get_option('rs_statni_svatky_data', []);
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Státní svátky</h4>";
+    echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_praz_action' value='pridat_svatek'>";
+    echo "<div class='rs-form-group'><label>Datum</label><input type='date' name='svatek_datum' required style='width:160px'></div>";
+    echo "<div class='rs-form-group'><label>Název svátku</label><input type='text' name='svatek_nazev' required></div>";
+    echo "<div class='rs-form-group' style='align-self:flex-end'><button type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button></div>";
+    echo "</form>";
+    if ($svatky) {
+        ksort($svatky);
+        echo "<table class='rs-table'><thead><tr><th>Datum</th><th>Název</th><th></th></tr></thead><tbody>";
+        foreach ($svatky as $d => $n) {
+            echo "<tr><td>" . esc_html($d) . "</td><td>" . esc_html($n) . "</td><td>";
+            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_praz_action' value='smazat_svatek'><input type='hidden' name='svatek_datum' value='" . esc_attr($d) . "'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
+        }
+        echo "</tbody></table>";
+    }
+    echo "</div>";
+
+    // Prázdniny
+    $prazdniny = get_option('rs_prazdniny', []);
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Prázdniny</h4>";
+    echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_praz_action' value='pridat_prazdniny'>";
+    echo "<div class='rs-form-group'><label>Název</label><input type='text' name='praz_nazev' required placeholder='např. Letní prázdniny 2025'></div>";
+    echo "<div class='rs-form-group'><label>Od</label><input type='date' name='praz_od' required style='width:160px'></div>";
+    echo "<div class='rs-form-group'><label>Do</label><input type='date' name='praz_do' required style='width:160px'></div>";
+    echo "<div class='rs-form-group' style='align-self:flex-end'><button type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button></div>";
+    echo "</form>";
+    if ($prazdniny) {
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Od</th><th>Do</th><th></th></tr></thead><tbody>";
+        foreach ($prazdniny as $i => $p) {
+            echo "<tr><td>" . esc_html($p['nazev']) . "</td><td>" . esc_html($p['od']) . "</td><td>" . esc_html($p['do']) . "</td><td>";
+            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_praz_action' value='smazat_prazdniny'><input type='hidden' name='praz_idx' value='{$i}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
+        }
+        echo "</tbody></table>";
+    }
+    echo "</div>";
+    return ob_get_clean();
+}
+
+// ═══ SEKCE: CENY ═════════════════════════════════════════════════════════════
+
+function rs_sekce_ceny(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_ceny_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_ceny')) return rs_alert('Neplatný token.','error');
+        $pid = (int)($_POST['ceny_prostor_id'] ?? 0);
+        if ($pid) {
+            $za_celek = (float)str_replace(',','.', $_POST['cena_za_celek'] ?? 0);
+            $za_osobu = (float)str_replace(',','.', $_POST['cena_za_osobu'] ?? 0);
+            update_post_meta($pid,'rs_cena_za_celek',$za_celek);
+            update_post_meta($pid,'rs_cena_za_osobu',$za_osobu);
+            // Segmenty
+            $segs = rs_get_segmenty($pid);
+            foreach ($segs as $seg) {
+                $s_celek = (float)str_replace(',','.', $_POST['seg_cena_celek_'.$seg->ID] ?? 0);
+                $s_osobu = (float)str_replace(',','.', $_POST['seg_cena_osobu_'.$seg->ID] ?? 0);
+                update_post_meta($seg->ID,'rs_cena_za_celek',$s_celek);
+                update_post_meta($seg->ID,'rs_cena_za_osobu',$s_osobu);
+            }
+            $zprava = rs_alert('Ceny uloženy.');
+        }
+    }
+
+    $prostory = rs_get_prostory();
+    $sel_pid  = (int)($_POST['ceny_prostor_id'] ?? ($_GET['ceny_pid'] ?? ($prostory[0]->ID ?? 0)));
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Ceník prostorů</h3>{$zprava}";
+    echo "<div class='rs-card'>";
+    echo "<form method='post'>" . wp_nonce_field('rs_ceny','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_ceny_action' value='ulozit'>";
+    echo "<div class='rs-form-group'><label>Vyberte prostor</label><select name='ceny_prostor_id' onchange='this.form.submit()'>";
+    foreach ($prostory as $p) {
+        $sel = $p->ID === $sel_pid ? 'selected' : '';
+        echo "<option value='{$p->ID}' {$sel}>" . esc_html($p->post_title) . "</option>";
+    }
+    echo "</select></div>";
+
+    if ($sel_pid) {
+        $ma_seg = rs_ma_segmenty($sel_pid);
+        echo "<p class='rs-text-hint' style='color:#777;font-size:13px'>Zadejte buď <strong>cenu za celek</strong> (paušál bez ohledu na počet osob), nebo <strong>cenu za osobu</strong>. Pokud zadáte obě, použije se cena za celek.</p>";
+
+        if (!$ma_seg) {
+            $cz = number_format((float)get_post_meta($sel_pid,'rs_cena_za_celek',true),0,'.','' );
+            $co = number_format((float)get_post_meta($sel_pid,'rs_cena_za_osobu',true),0,'.','' );
+            echo "<div class='rs-form-row'>";
+            echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='cena_za_celek' value='{$cz}' min='0' step='1' style='width:150px'></div>";
+            echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='cena_za_osobu' value='{$co}' min='0' step='1' style='width:150px'></div>";
+            echo "</div>";
+        } else {
+            echo "<p style='font-size:13px;color:#555'>Prostor má segmenty – nastavte ceny pro každý segment:</p>";
+            foreach (rs_get_segmenty($sel_pid) as $seg) {
+                $sc = number_format((float)get_post_meta($seg->ID,'rs_cena_za_celek',true),0,'.','' );
+                $so = number_format((float)get_post_meta($seg->ID,'rs_cena_za_osobu',true),0,'.','' );
+                echo "<div class='rs-segment-box'><strong>" . esc_html($seg->post_title) . "</strong><div class='rs-form-row' style='margin-top:8px'>";
+                echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='seg_cena_celek_{$seg->ID}' value='{$sc}' min='0' style='width:150px'></div>";
+                echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='seg_cena_osobu_{$seg->ID}' value='{$so}' min='0' style='width:150px'></div>";
+                echo "</div></div>";
+            }
+        }
+        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit ceny</button></div>";
+    }
+    echo "</form></div>";
+    return ob_get_clean();
+}
+
+// ═══ SEKCE: NASTAVENÍ ════════════════════════════════════════════════════════
+
+function rs_sekce_nastaveni(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_nast_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_nastaveni')) return rs_alert('Neplatný token.','error');
+
+        update_option('rs_vzdusne_aktivni', isset($_POST['vzdusne_aktivni']) ? '1' : '0');
+        update_option('rs_doplnujici_info', wp_kses_post($_POST['doplnujici_info'] ?? ''));
+        // Vzdušné kategorie
+        $kategorie = [];
+        $kat_od  = (array)($_POST['kat_od']  ?? []);
+        $kat_do  = (array)($_POST['kat_do']  ?? []);
+        $kat_vyse = (array)($_POST['kat_vyse'] ?? []);
+        foreach ($kat_od as $i => $od) {
+            if ($od === '' && ($kat_do[$i] ?? '') === '') continue;
+            $kategorie[] = ['od' => (int)$od, 'do' => (int)($kat_do[$i] ?? 0), 'vyse' => (float)str_replace(',','.',$kat_vyse[$i] ?? 0)];
+        }
+        update_option('rs_vzdusne_kategorie', $kategorie);
+        update_option('rs_vzdusne_neplatici', isset($_POST['vzdusne_neplatici']) ? '1' : '0');
+        update_option('rs_vzdusne_info', sanitize_textarea_field($_POST['vzdusne_info'] ?? ''));
+        $zprava = rs_alert('Nastavení uloženo.');
+    }
+
+    $vzdusne_on  = get_option('rs_vzdusne_aktivni', '0') === '1';
+    $kat         = get_option('rs_vzdusne_kategorie', []);
+    $neplatici   = get_option('rs_vzdusne_neplatici', '0') === '1';
+    $info        = get_option('rs_vzdusne_info', '');
+    $dop_info    = get_option('rs_doplnujici_info', '');
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Nastavení</h3>{$zprava}";
+    echo "<form method='post'>" . wp_nonce_field('rs_nastaveni','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_nast_action' value='ulozit'>";
+
+    // Doplňující informace
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Doplňující informace (zobrazí se na frontendu pod formulářem)</h4>";
+    echo "<div class='rs-form-group'><textarea name='doplnujici_info' rows='6' style='max-width:100%'>" . esc_textarea($dop_info) . "</textarea></div>";
+    echo "</div>";
+
+    // Vzdušné
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Ubytovací poplatek – vzdušné</h4>";
+    $vch = $vzdusne_on ? 'checked' : '';
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='vzdusne_aktivni' {$vch}> Zapnout výběr vzdušného</label></div>";
+    $vsty = $vzdusne_on ? '' : "style='display:none'";
+    echo "<div id='rs-vzdusne-detail' {$vsty}>";
+    echo "<p style='font-size:13px;color:#555'>Nastavte věkové kategorie a výši poplatku (Kč/noc/osoba). Zadejte věkové rozmezí od–do. Pro kategorii dospělých zadejte velké číslo jako horní hranici (např. 99).</p>";
+    echo "<div id='rs-kat-wrap'>";
+    foreach ($kat as $i => $k) {
+        echo rs_vzdusne_kat_row($i, $k['od'], $k['do'], $k['vyse']);
+    }
+    if (empty($kat)) echo rs_vzdusne_kat_row(0, '', '', '');
+    echo "</div>";
+    echo "<button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAddKat()' style='margin-bottom:12px'>➕ Přidat kategorii</button>";
+    $nch = $neplatici ? 'checked' : '';
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='vzdusne_neplatici' {$nch}> Existuje kategorie neplatících (např. dospělý doprovod)</label></div>";
+    echo "<div class='rs-form-group'><label>Informace o vzdušném ve vašem městě</label><textarea name='vzdusne_info' rows='4' style='max-width:100%'>" . esc_textarea($info) . "</textarea></div>";
+    echo "</div>"; // rs-vzdusne-detail
+    echo "</div>"; // card
+
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit nastavení</button></div>";
+    echo "</form>";
+    ?>
+    <script>
+    document.querySelector('[name=vzdusne_aktivni]').addEventListener('change', function(){
+        document.getElementById('rs-vzdusne-detail').style.display = this.checked ? '' : 'none';
+    });
+    var rsKatIdx = <?php echo max(count($kat), 1); ?>;
+    function rsAddKat(){
+        var wrap = document.getElementById('rs-kat-wrap');
+        var row = document.createElement('div');
+        row.innerHTML = <?php echo json_encode(rs_vzdusne_kat_row('__IDX__',  '', '', '')); ?>.replace(/__IDX__/g, rsKatIdx++);
+        wrap.appendChild(row);
+    }
+    function rsRemoveKat(btn){ btn.closest('.rs-form-row').remove(); }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_vzdusne_kat_row($idx, $od, $do_, $vyse): string {
+    return "<div class='rs-form-row' style='margin-bottom:8px'>"
+        . "<div class='rs-form-group'><label>Věk od</label><input type='number' name='kat_od[]' value='" . esc_attr($od) . "' min='0' max='99' style='width:80px'></div>"
+        . "<div class='rs-form-group'><label>Věk do</label><input type='number' name='kat_do[]' value='" . esc_attr($do_) . "' min='0' max='99' style='width:80px'></div>"
+        . "<div class='rs-form-group'><label>Výše (Kč/noc)</label><input type='number' name='kat_vyse[]' value='" . esc_attr($vyse) . "' min='0' step='0.01' style='width:120px'></div>"
+        . "<div class='rs-form-group' style='align-self:flex-end'><button type='button' class='rs-btn rs-btn-sm rs-btn-danger' onclick='rsRemoveKat(this)'>✕</button></div>"
+        . "</div>";
+}
+
+// ═══ SEKCE: SPRÁVA REZERVACÍ ═════════════════════════════════════════════════
+
+function rs_sekce_rezervace(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_rez_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_rez_spravce')) return rs_alert('Neplatný token.','error');
+        $action = sanitize_key($_POST['rs_rez_action']);
+        $rid    = (int)($_POST['rez_id'] ?? 0);
+
+        if ($action === 'potvrdit' && $rid) {
+            update_post_meta($rid, 'rs_stav', 'potvrzena');
+            // Spočítat a uložit cenu
+            $pid   = (int)get_post_meta($rid,'rs_prostor_id',true);
+            $segs  = (array)get_post_meta($rid,'rs_segmenty_ids',true);
+            $pocet = (int)get_post_meta($rid,'rs_pocet_lidi',true);
+            $od    = get_post_meta($rid,'rs_datum_od',true);
+            $do_   = get_post_meta($rid,'rs_datum_do',true);
+            $ind   = (float)get_post_meta($rid,'rs_cena_individualni',true);
+            $cena  = $ind > 0 ? $ind : rs_vypocti_cenu($pid,$segs,$pocet,$od,$do_);
+            update_post_meta($rid,'rs_cena_celkem',$cena);
+            rs_notifikuj_potvrzeni($rid);
+            $zprava = rs_alert('Rezervace potvrzena a žadatel informován.');
+        } elseif ($action === 'zrusit' && $rid) {
+            update_post_meta($rid, 'rs_stav', 'zrusena');
+            rs_notifikuj_zruseni($rid);
+            $zprava = rs_alert('Rezervace zrušena.');
+        } elseif ($action === 'ulozit_ind_cenu' && $rid) {
+            $ind = (float)str_replace(',','.',($_POST['ind_cena'] ?? 0));
+            update_post_meta($rid,'rs_cena_individualni',$ind);
+            update_post_meta($rid,'rs_cena_celkem',$ind);
+            $zprava = rs_alert('Individuální cena uložena.');
+        } elseif ($action === 'odeslat_ucastnici' && $rid) {
+            $ucastnici = rs_uloz_ucastniky($rid);
+            if ($ucastnici !== false) {
+                rs_notifikuj_ucastnici($rid, $ucastnici);
+                $zprava = rs_alert('Seznam účastníků uložen a odeslán správcům.');
+            } else {
+                $zprava = rs_alert('Chyba při ukládání účastníků.','error');
+            }
+        }
+    }
+
+    // Filter
+    $stav_filter = sanitize_key($_GET['rs_filter_stav'] ?? 'vse');
+    $args = ['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'DESC'];
+    if ($stav_filter !== 'vse') $args['meta_query'] = [['key'=>'rs_stav','value'=>$stav_filter]];
+    $rezervace = get_posts($args);
+
+    $detail_id = (int)($_GET['rs_rez_detail'] ?? 0);
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Správa rezervací</h3>{$zprava}";
+
+    if ($detail_id) {
+        echo rs_rez_detail_admin($detail_id);
+        echo "<a href='" . esc_url(remove_query_arg('rs_rez_detail')) . "' class='rs-btn rs-btn-secondary' style='margin-top:12px'>← Zpět na seznam</a>";
+        return ob_get_clean();
+    }
+
+    // Filter tabs
+    echo "<div style='display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap'>";
+    foreach (['vse'=>'Vše','cekajici'=>'Čekající','potvrzena'=>'Potvrzené','zrusena'=>'Zrušené'] as $k=>$l) {
+        $active = $stav_filter === $k ? 'rs-btn-primary' : 'rs-btn-secondary';
+        echo "<a href='" . esc_url(add_query_arg('rs_filter_stav',$k)) . "' class='rs-btn rs-btn-sm {$active}'>{$l}</a>";
+    }
+    echo "</div>";
+
+    if (empty($rezervace)) {
+        echo rs_alert('Žádné rezervace.','info');
+        return ob_get_clean();
+    }
+
+    echo "<table class='rs-table'><thead><tr><th>Žadatel</th><th>Prostor</th><th>Od</th><th>Do</th><th>Osob</th><th>Typ</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+    foreach ($rezervace as $r) {
+        $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
+        $typ_rez = get_post_meta($r->ID,'rs_typ_rezervace',true);
+        $stav    = get_post_meta($r->ID,'rs_stav',true);
+        echo "<tr>";
+        echo "<td>" . esc_html(rs_rez_jmeno($r->ID)) . "</td>";
+        echo "<td>" . esc_html($prostor) . "</td>";
+        echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
+        echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
+        echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
+        echo "<td>" . ($typ_rez === 'interni' ? '<span class="rs-badge rs-badge-info">Interní</span>' : '<span class="rs-badge">Externí</span>') . "</td>";
+        echo "<td>" . rs_stav_badge($stav) . "</td>";
+        echo "<td>";
+        echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
+        if ($stav === 'cekajici') {
+            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_rez_action' value='potvrdit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-success'>✓ Potvrdit</button></form> ";
+        }
+        if ($stav !== 'zrusena') {
+            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
+        }
+        echo "</td></tr>";
+    }
+    echo "</tbody></table>";
+    return ob_get_clean();
+}
+
+function rs_rez_detail_admin(int $id): string {
+    $pid    = (int)get_post_meta($id,'rs_prostor_id',true);
+    $segs   = (array)get_post_meta($id,'rs_segmenty_ids',true);
+    $stav   = get_post_meta($id,'rs_stav',true);
+    $typ    = get_post_meta($id,'rs_typ_rezervace',true);
+    $od     = get_post_meta($id,'rs_datum_od',true);
+    $do_    = get_post_meta($id,'rs_datum_do',true);
+    $pocet  = (int)get_post_meta($id,'rs_pocet_lidi',true);
+    $cena   = (float)get_post_meta($id,'rs_cena_celkem',true);
+    $ind    = (float)get_post_meta($id,'rs_cena_individualni',true);
+    $token  = get_post_meta($id,'rs_token',true);
+    $ucast  = get_post_meta($id,'rs_ucastnici',true);
+
+    ob_start();
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Detail rezervace #" . $id . " – " . rs_stav_badge($stav) . "</h4>";
+
+    // Základní info
+    echo "<table class='rs-table' style='max-width:600px'>";
+    echo "<tr><th style='width:180px'>Prostor</th><td>" . esc_html(get_the_title($pid));
+    if ($segs) {
+        $seg_names = array_map(fn($s) => get_the_title($s), $segs);
+        echo " <em style='color:#777'>(" . esc_html(implode(', ',$seg_names)) . ")</em>";
+    }
+    echo "</td></tr>";
+    echo "<tr><th>Termín</th><td>" . esc_html($od) . " – " . esc_html($do_) . "</td></tr>";
+    echo "<tr><th>Počet osob</th><td>" . $pocet . "</td></tr>";
+    echo "<tr><th>Typ</th><td>" . ($typ === 'interni' ? 'Interní' : 'Externí') . "</td></tr>";
+    echo "<tr><th>Stav</th><td>" . rs_stav_badge($stav) . "</td></tr>";
+
+    // Kontaktní info
+    $rez_typ = get_post_meta($id,'rs_rez_typ',true);
+    if ($rez_typ === 'pravnicka') {
+        echo "<tr><th>Organizace</th><td>" . esc_html(get_post_meta($id,'rs_nazev',true)) . "</td></tr>";
+        echo "<tr><th>IČO</th><td>" . esc_html(get_post_meta($id,'rs_ico',true)) . "</td></tr>";
+        echo "<tr><th>Sídlo</th><td>" . esc_html(get_post_meta($id,'rs_sidlo',true)) . "</td></tr>";
+        echo "<tr><th>Kontakt</th><td>" . esc_html(get_post_meta($id,'rs_kontakt_jmeno',true)) . "</td></tr>";
+        echo "<tr><th>Mobil</th><td>" . esc_html(get_post_meta($id,'rs_mobil',true)) . "</td></tr>";
+        echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
+    } else {
+        echo "<tr><th>Jméno</th><td>" . esc_html(get_post_meta($id,'rs_jmeno',true)) . " " . esc_html(get_post_meta($id,'rs_prijmeni',true)) . "</td></tr>";
+        echo "<tr><th>Datum nar.</th><td>" . esc_html(get_post_meta($id,'rs_datum_narozeni',true)) . "</td></tr>";
+        echo "<tr><th>Bydliště</th><td>" . esc_html(get_post_meta($id,'rs_bydliste',true)) . "</td></tr>";
+        echo "<tr><th>Mobil</th><td>" . esc_html(get_post_meta($id,'rs_mobil',true)) . "</td></tr>";
+        echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
+    }
+    echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
+    if ($token) echo "<tr><th>Token</th><td><code>" . esc_html($token) . "</code></td></tr>";
+    echo "</table>";
+
+    // Individuální cena
+    if ($stav !== 'zrusena') {
+        echo "<div style='margin-top:16px'><h5>Nastavit individuální cenu (přepíše automatický výpočet):</h5>";
+        echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+        echo "<input type='hidden' name='rs_rez_action' value='ulozit_ind_cenu'><input type='hidden' name='rez_id' value='{$id}'>";
+        echo "<input type='number' name='ind_cena' value='" . esc_attr($ind ?: '') . "' min='0' step='1' style='width:150px' placeholder='Kč'>";
+        echo "<button type='submit' class='rs-btn rs-btn-primary rs-btn-sm'>Uložit cenu</button></form></div>";
+    }
+
+    // Účastníci (vzdušné)
+    if (get_option('rs_vzdusne_aktivni') === '1' && $stav === 'potvrzena') {
+        echo "<div style='margin-top:20px'><h5>Seznam ubytovaných (vzdušné)</h5>";
+        if (!empty($ucast) && is_array($ucast)) {
+            echo "<table class='rs-table'><thead><tr><th>Jméno</th><th>Příjmení</th><th>Dat. nar.</th><th>Adresa</th><th>Neplatí vzdušné</th></tr></thead><tbody>";
+            foreach ($ucast as $u) {
+                echo "<tr><td>" . esc_html($u['jmeno'] ?? '') . "</td><td>" . esc_html($u['prijmeni'] ?? '') . "</td><td>" . esc_html($u['datum_narozeni'] ?? '') . "</td><td>" . esc_html($u['adresa'] ?? '') . "</td><td>" . (($u['neplati'] ?? false) ? '✓' : '') . "</td></tr>";
+            }
+            echo "</tbody></table>";
+        } else {
+            echo "<p style='color:#777;font-size:13px'>Účastníci zatím nebyli vyplněni.</p>";
+        }
+        echo "</div>";
+    }
+
+    echo "</div>"; // card
+    return ob_get_clean();
+}
+
+function rs_notifikuj_ucastnici(int $id, array $ucastnici) {
+    $prostor = get_the_title((int)get_post_meta($id,'rs_prostor_id',true));
+    $od = get_post_meta($id,'rs_datum_od',true);
+    $do_ = get_post_meta($id,'rs_datum_do',true);
+
+    $body = "Seznam ubytovaných pro rezervaci prostoru {$prostor} ({$od} – {$do_}):\n\n";
+    $body .= str_pad('Jméno',20) . str_pad('Příjmení',20) . str_pad('Dat. nar.',14) . "Adresa\n";
+    $body .= str_repeat('-',80) . "\n";
+    foreach ($ucastnici as $u) {
+        $neplati = ($u['neplati'] ?? false) ? ' [neplatí]' : '';
+        $body .= str_pad($u['jmeno'] ?? '',20) . str_pad($u['prijmeni'] ?? '',20) . str_pad($u['datum_narozeni'] ?? '',14) . ($u['adresa'] ?? '') . $neplati . "\n";
+    }
+
+    foreach (rs_spravci_emaily() as $email) {
+        rs_mail($email, "Seznam ubytovaných – {$prostor}", $body);
+    }
+}
+
+function rs_uloz_ucastniky(int $id) {
+    $jmena  = (array)($_POST['ucast_jmeno'] ?? []);
+    $prijm  = (array)($_POST['ucast_prijmeni'] ?? []);
+    $dnar   = (array)($_POST['ucast_datum_nar'] ?? []);
+    $adr    = (array)($_POST['ucast_adresa'] ?? []);
+    $neplati = (array)($_POST['ucast_neplati'] ?? []);
+    $result = [];
+    foreach ($jmena as $i => $j) {
+        if (!$j) continue;
+        $result[] = [
+            'jmeno'         => sanitize_text_field($j),
+            'prijmeni'      => sanitize_text_field($prijm[$i] ?? ''),
+            'datum_narozeni'=> sanitize_text_field($dnar[$i] ?? ''),
+            'adresa'        => sanitize_text_field($adr[$i] ?? ''),
+            'neplati'       => !empty($neplati[$i]),
+        ];
+    }
+    update_post_meta($id, 'rs_ucastnici', $result);
+    return $result;
+}
+
+// ═══ SEKCE: INTERNÍ REZERVACE ════════════════════════════════════════════════
+
+function rs_sekce_interni(): string {
+    $zprava = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_int_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_interni')) return rs_alert('Neplatný token.','error');
+        $action = sanitize_key($_POST['rs_int_action']);
+        $zprava = rs_interni_zpracuj($action);
+    }
+
+    $user_id    = get_current_user_id();
+    $is_spravce = rs_ma_pravo('spravce');
+
+    // Načíst rezervace pro zobrazení
+    $filter_args = ['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'ASC',
+        'meta_query'=>[['key'=>'rs_typ_rezervace','value'=>'interni']]];
+    if (!$is_spravce) {
+        $filter_args['meta_query'][] = ['key'=>'rs_wp_user_id','value'=>$user_id];
+    }
+    $rezervace = get_posts($filter_args);
+    $prostory = rs_get_prostory();
+
+    ob_start();
+    echo "<h3 class='rs-section-title'>Interní rezervace</h3>{$zprava}";
+
+    // Formulář nové rezervace
+    echo "<div class='rs-card'><h4 class='rs-card-title'>➕ Nová interní rezervace</h4>";
+    echo "<form method='post' id='rs-int-form'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_int_action' value='vytvorit'>";
+
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Prostor *</label><select name='int_prostor_id' id='rs-int-prostor' onchange='rsIntProstorChange(this.value)' required>";
+    echo "<option value=''>– vyberte –</option>";
+    foreach ($prostory as $p) echo "<option value='{$p->ID}'>" . esc_html($p->post_title) . "</option>";
+    echo "</select></div>";
+    echo "<div class='rs-form-group' id='rs-int-seg-wrap' style='display:none'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-int-seg-list'></div></div>";
+    echo "</div>";
+
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' required></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' required></div>";
+    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet' value='1' min='1' style='width:90px'></div>";
+    echo "</div>";
+
+    echo "<div class='rs-form-group'><label>Poznámka</label><textarea name='int_poznamka' rows='2'></textarea></div>";
+
+    // Opakující se rezervace
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_opakujici' id='rs-int-opak' onchange='rsIntOpakChange(this)'> Opakující se rezervace (např. pravidelná schůzka)</label></div>";
+    echo "<div id='rs-int-opak-detail' style='display:none;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:14px'>";
+    echo "<p style='font-size:13px;color:#555;margin-top:0'>Opakující se rezervace se vytvoří jako jednotlivé záznamy na každý vybraný den.</p>";
+    $dny = ['1'=>'Pondělí','2'=>'Úterý','3'=>'Středa','4'=>'Čtvrtek','5'=>'Pátek','6'=>'Sobota','7'=>'Neděle'];
+    echo "<div class='rs-form-group'><label>Den v týdnu *</label><select name='int_den_tydne'>";
+    foreach ($dny as $k=>$v) echo "<option value='{$k}'>{$v}</option>";
+    echo "</select></div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
+    echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
+    echo "</div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Opakovat od *</label><input type='date' name='int_opakovani_od'></div>";
+    echo "<div class='rs-form-group'><label>Opakovat do *</label><input type='date' name='int_opakovani_do'></div>";
+    echo "</div>";
+    echo "<div class='rs-form-group'><label>Výjimky – vynechat tato data (oddělte čárkami, formát RRRR-MM-DD)</label><input type='text' name='int_vyjimky' placeholder='2025-12-24, 2026-01-01'></div>";
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_prazdniny'> Automaticky vynechat prázdniny</label></div>";
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_svatky'> Automaticky vynechat státní svátky</label></div>";
+    echo "</div>"; // opak detail
+
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>Vytvořit rezervaci</button></div>";
+    echo "</form></div>";
+
+    // Přehled rezervací
+    if ($rezervace) {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
+        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Osob</th><th>Stav</th>";
+        if ($is_spravce) echo "<th>Zadal</th>";
+        echo "<th>Skupina</th><th>Akce</th></tr></thead><tbody>";
+
+        foreach ($rezervace as $r) {
+            $stav    = get_post_meta($r->ID,'rs_stav',true);
+            $skupina = get_post_meta($r->ID,'rs_skupina_id',true);
+            $uid     = (int)get_post_meta($r->ID,'rs_wp_user_id',true);
+            $user    = get_userdata($uid);
+            echo "<tr>";
+            echo "<td>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
+            $segs = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
+            if ($segs) echo " <em style='font-size:12px;color:#777'>(" . implode(', ', array_map('get_the_title',$segs)) . ")</em>";
+            echo "</td>";
+            echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
+            echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
+            echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
+            echo "<td>" . rs_stav_badge($stav) . "</td>";
+            if ($is_spravce) echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
+            echo "<td>" . ($skupina ? "<span class='rs-badge rs-badge-info' style='font-size:11px' title='ID skupiny'>" . esc_html(substr($skupina,0,8)) . "…</span>" : '–') . "</td>";
+            echo "<td>";
+            if ($stav !== 'zrusena' && ($uid === get_current_user_id() || $is_spravce)) {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit tuto rezervaci?\")'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_int_action' value='zrusit'><input type='hidden' name='int_rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕</button></form>";
+                if ($skupina) {
+                    echo " <form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit celou sérii?\")'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
+                    echo "<input type='hidden' name='rs_int_action' value='zrusit_skupinu'><input type='hidden' name='int_skupina_id' value='" . esc_attr($skupina) . "'>";
+                    echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ série</button></form>";
+                }
+            }
+            echo "</td></tr>";
+        }
+        echo "</tbody></table></div>";
+    }
+
+    // JS
+    $seg_data = [];
+    foreach ($prostory as $p) {
+        if (rs_ma_segmenty($p->ID)) {
+            foreach (rs_get_segmenty($p->ID) as $seg) {
+                $seg_data[$p->ID][] = ['id' => $seg->ID, 'nazev' => $seg->post_title];
+            }
+        }
+    }
+    ?>
+    <script>
+    var rsSegData = <?php echo json_encode($seg_data); ?>;
+    function rsIntProstorChange(pid){
+        var wrap = document.getElementById('rs-int-seg-wrap');
+        var list = document.getElementById('rs-int-seg-list');
+        list.innerHTML = '';
+        if(rsSegData[pid]){
+            rsSegData[pid].forEach(function(s){
+                list.innerHTML += '<label style="display:block;margin-bottom:4px"><input type="checkbox" name="int_segmenty[]" value="'+s.id+'"> '+s.nazev+'</label>';
+            });
+            wrap.style.display = '';
+        } else {
+            wrap.style.display = 'none';
+        }
+    }
+    function rsIntOpakChange(cb){
+        document.getElementById('rs-int-opak-detail').style.display = cb.checked ? '' : 'none';
+        var dtInputs = document.querySelectorAll('#rs-int-form input[type=datetime-local]');
+        dtInputs.forEach(function(i){ i.required = !cb.checked; });
+    }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_interni_zpracuj(string $action): string {
+    $uid = get_current_user_id();
+    if (!$uid) return rs_alert('Nejsi přihlášen.','error');
+
+    if ($action === 'vytvorit') {
+        $prostor_id = (int)($_POST['int_prostor_id'] ?? 0);
+        $seg_ids    = array_map('intval', (array)($_POST['int_segmenty'] ?? []));
+        $pocet      = max(1,(int)($_POST['int_pocet'] ?? 1));
+        $poznamka   = sanitize_textarea_field($_POST['int_poznamka'] ?? '');
+        $opakujici  = isset($_POST['int_opakujici']);
+
+        if (!$prostor_id) return rs_alert('Vyberte prostor.','error');
+
+        if (!$opakujici) {
+            $od  = sanitize_text_field($_POST['int_datum_od'] ?? '');
+            $do_ = sanitize_text_field($_POST['int_datum_do'] ?? '');
+            if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
+            $od  = str_replace('T',' ',$od) . ':00';
+            $do_ = str_replace('T',' ',$do_) . ':00';
+            if (strtotime($od) >= strtotime($do_)) return rs_alert('Datum konce musí být po datu začátku.','error');
+            if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
+            $stav  = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
+            $rid   = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
+            return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici' ? 'Čeká na schválení (víkend/svátek/prázdniny – ale bude zdarma).' : 'Automaticky potvrzena.'));
+        }
+
+        // Opakující se
+        $den      = (int)($_POST['int_den_tydne'] ?? 1);
+        $cas_od   = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
+        $cas_do   = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
+        $serie_od = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
+        $serie_do = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
+        if (!$serie_od || !$serie_do) return rs_alert('Zadejte rozsah opakování.','error');
+
+        $vyjimky_raw    = sanitize_text_field($_POST['int_vyjimky'] ?? '');
+        $vyjimky        = array_filter(array_map('trim', explode(',', $vyjimky_raw)));
+        $vynechat_praz  = isset($_POST['int_vynechat_prazdniny']);
+        $vynechat_svat  = isset($_POST['int_vynechat_svatky']);
+
+        $skupina_id = rs_token();
+        $created = 0; $skipped = 0;
+        $current = strtotime($serie_od);
+        $end     = strtotime($serie_do);
+
+        while ($current <= $end) {
+            if ((int)date('N',$current) === $den) {
+                $d   = date('Y-m-d',$current);
+                $skip = in_array($d,$vyjimky,true)
+                     || ($vynechat_praz && rs_jsou_prazdniny($d))
+                     || ($vynechat_svat && rs_je_svatek($d));
+                if (!$skip) {
+                    $od  = $d . ' ' . $cas_od . ':00';
+                    $do_ = $d . ' ' . $cas_do . ':00';
+                    if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
+                        $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
+                        rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
+                        $created++;
+                    } else { $skipped++; }
+                }
+            }
+            $current = strtotime('+1 day',$current);
+        }
+        return rs_alert("Série vytvořena: {$created} rezervací." . ($skipped ? " Přeskočeno {$skipped} (kolize nebo obsazeno)." : ''));
+    }
+
+    if ($action === 'zrusit') {
+        $rid = (int)($_POST['int_rez_id'] ?? 0);
+        if (!$rid) return '';
+        $owner = (int)get_post_meta($rid,'rs_wp_user_id',true);
+        if ($owner !== $uid && !rs_ma_pravo('spravce')) return rs_alert('Nemáš oprávnění.','error');
+        update_post_meta($rid,'rs_stav','zrusena');
+        return rs_alert('Rezervace zrušena.');
+    }
+
+    if ($action === 'zrusit_skupinu') {
+        $skupina = sanitize_text_field($_POST['int_skupina_id'] ?? '');
+        if (!$skupina) return '';
+        $rez = get_posts(['post_type'=>'rs_rezervace','numberposts'=>-1,'fields'=>'ids','meta_query'=>[['key'=>'rs_skupina_id','value'=>$skupina]]]);
+        foreach ($rez as $rid) {
+            $owner = (int)get_post_meta($rid,'rs_wp_user_id',true);
+            if ($owner === $uid || rs_ma_pravo('spravce')) {
+                update_post_meta($rid,'rs_stav','zrusena');
+            }
+        }
+        return rs_alert('Celá série zrušena.');
+    }
+    return '';
+}
+
+function rs_vytvor_rezervaci_post(int $prostor_id, array $seg_ids, string $od, string $do_, int $pocet, string $typ, string $stav, int $uid, string $poznamka, string $skupina_id, string $token = ''): int {
+    $prostor_nazev = get_the_title($prostor_id);
+    $rid = wp_insert_post(['post_type'=>'rs_rezervace','post_status'=>'publish','post_title'=>$prostor_nazev . ' – ' . substr($od,0,10)]);
+    if (!$rid) return 0;
+    update_post_meta($rid,'rs_prostor_id',$prostor_id);
+    update_post_meta($rid,'rs_segmenty_ids',$seg_ids);
+    update_post_meta($rid,'rs_datum_od',$od);
+    update_post_meta($rid,'rs_datum_do',$do_);
+    update_post_meta($rid,'rs_pocet_lidi',$pocet);
+    update_post_meta($rid,'rs_typ_rezervace',$typ);
+    update_post_meta($rid,'rs_stav',$stav);
+    update_post_meta($rid,'rs_wp_user_id',$uid);
+    update_post_meta($rid,'rs_poznamka',$poznamka);
+    if ($skupina_id) update_post_meta($rid,'rs_skupina_id',$skupina_id);
+    if ($token)      update_post_meta($rid,'rs_token',$token);
+    return $rid;
+}
+
+// ═══ FRONTEND: KALENDÁŘ [rs_kalendar] ════════════════════════════════════════
+
+add_shortcode('rs_kalendar','rs_kalendar_sc');
+function rs_kalendar_sc(array $atts): string {
+    rs_css();
+    $prostory = rs_get_prostory();
+    if (empty($prostory)) return '<p>Žádné prostory nejsou zatím k dispozici.</p>';
+
+    $rok    = (int)($_GET['rs_rok']   ?? date('Y'));
+    $mesic  = (int)($_GET['rs_mesic'] ?? date('n'));
+    if ($mesic < 1) { $mesic = 12; $rok--; }
+    if ($mesic > 12){ $mesic = 1;  $rok++; }
+    $prev_url = add_query_arg(['rs_rok' => $mesic === 1 ? $rok-1 : $rok, 'rs_mesic' => $mesic === 1 ? 12 : $mesic-1]);
+    $next_url = add_query_arg(['rs_rok' => $mesic === 12 ? $rok+1 : $rok, 'rs_mesic' => $mesic === 12 ? 1 : $mesic+1]);
+
+    // Zjistit obsazenost pro každý prostor/segment v daném měsíci
+    $days_in_month = (int)date('t', mktime(0,0,0,$mesic,1,$rok));
+    $mesic_od = sprintf('%04d-%02d-01 00:00:00', $rok, $mesic);
+    $mesic_do = sprintf('%04d-%02d-%02d 23:59:59', $rok, $mesic, $days_in_month);
+
+    $rezervace = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'meta_query'=>[
+        'relation'=>'AND',
+        ['key'=>'rs_stav','value'=>'zrusena','compare'=>'!='],
+        ['key'=>'rs_datum_od','value'=>$mesic_do,'compare'=>'<='],
+        ['key'=>'rs_datum_do','value'=>$mesic_od,'compare'=>'>='],
+    ]]);
+
+    // Sestavit mapu obsazenosti: [prostor_id][den] = true/false
+    $busy = [];
+    foreach ($rezervace as $r) {
+        $pid  = (int)get_post_meta($r->ID,'rs_prostor_id',true);
+        $segs = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
+        $r_od = strtotime(get_post_meta($r->ID,'rs_datum_od',true));
+        $r_do = strtotime(get_post_meta($r->ID,'rs_datum_do',true));
+        $target_ids = empty($segs) ? [$pid] : $segs;
+        for ($d = 1; $d <= $days_in_month; $d++) {
+            $day_start = mktime(0,0,0,$mesic,$d,$rok);
+            $day_end   = mktime(23,59,59,$mesic,$d,$rok);
+            if ($r_od <= $day_end && $r_do >= $day_start) {
+                foreach ($target_ids as $tid) {
+                    $busy[$tid][$d] = true;
+                }
+            }
+        }
+    }
+
+    ob_start();
+    echo "<div class='rs-wrap'>";
+    echo "<h3 style='margin-bottom:16px'>Obsazenost prostorů</h3>";
+
+    // Navigace
+    $mesice = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+    echo "<div style='display:flex;align-items:center;gap:12px;margin-bottom:20px'>";
+    echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
+    echo "<strong style='font-size:16px'>" . $mesice[$mesic] . " " . $rok . "</strong>";
+    echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
+    echo "</div>";
+
+    foreach ($prostory as $p) {
+        echo "<div style='margin-bottom:28px'>";
+        echo "<h4 style='color:#1a5c2a;margin-bottom:8px'>" . esc_html($p->post_title) . "</h4>";
+
+        $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
+
+        echo "<div style='overflow-x:auto'>";
+        echo "<table class='rs-kal-table'><thead><tr><th>Prostor/Segment</th>";
+        for ($d = 1; $d <= $days_in_month; $d++) {
+            $dow = date('N', mktime(0,0,0,$mesic,$d,$rok));
+            $style = ($dow >= 6) ? ' style="background:#2e7d32"' : '';
+            echo "<th{$style}>{$d}</th>";
+        }
+        echo "</tr></thead><tbody>";
+
+        foreach ($items as $item) {
+            echo "<tr><td>" . esc_html($item->post_title) . "</td>";
+            for ($d = 1; $d <= $days_in_month; $d++) {
+                $is_busy = !empty($busy[$item->ID][$d]);
+                if ($is_busy) echo "<td><span class='rs-kal-busy'>✕</span></td>";
+                else echo "<td><span class='rs-kal-free'>✓</span></td>";
+            }
+            echo "</tr>";
+        }
+        echo "</tbody></table></div>";
+
+        // Fotky
+        $fotky = (array)get_post_meta($p->ID,'rs_fotky',true);
+        if ($fotky) {
+            echo "<div class='rs-foto-preview' style='margin-top:8px'>";
+            foreach ($fotky as $fid) {
+                $url = wp_get_attachment_image_url((int)$fid,'medium');
+                if ($url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+            }
+            echo "</div>";
+        }
+        echo "</div>";
+    }
+
+    // Legenda + doplňující info
+    echo "<div style='margin-top:16px;font-size:13px;color:#555'>";
+    echo "<span class='rs-kal-free' style='margin-right:8px'>✓ Volno</span> <span class='rs-kal-busy' style='margin-right:8px'>✕ Obsazeno</span>";
+    echo "</div>";
+
+    $doplnujici = get_option('rs_doplnujici_info','');
+    if ($doplnujici) echo "<div style='margin-top:20px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($doplnujici)) . "</div>";
+
+    echo "</div>"; // .rs-wrap
+    return ob_get_clean();
+}
+
+// ═══ FRONTEND: REZERVAČNÍ FORMULÁŘ [rs_formular] ═════════════════════════════
+
+add_shortcode('rs_formular','rs_formular_sc');
+function rs_formular_sc(): string {
+    // Token-based management má přednost
+    if (isset($_GET['rs_sprava'])) return rs_render_sprava_rezervace();
+
+    $zprava = '';
+    $hotovo = false;
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_formular_odeslat'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_formular')) {
+            $zprava = rs_alert('Neplatný token. Zkuste znovu.','error');
+        } else {
+            $result = rs_zpracuj_externi_formular();
+            if (is_string($result)) { $zprava = $result; }
+            else { $hotovo = true; $zprava = rs_alert('Vaše žádost o rezervaci byla přijata! Podrobnosti jsme vám zaslali na e-mail. Rezervace podléhá schválení.'); }
+        }
+    }
+
+    $prostory = rs_get_prostory();
+    ob_start();
+    rs_css();
+    echo "<div class='rs-wrap'>";
+
+    if ($hotovo) {
+        echo $zprava;
+        echo "</div>";
+        return ob_get_clean();
+    }
+
+    echo "<h3 style='margin-bottom:16px'>Žádost o rezervaci prostoru</h3>{$zprava}";
+
+    echo "<form method='post' id='rs-ext-form'>" . wp_nonce_field('rs_formular','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_formular_odeslat' value='1'>";
+
+    // Typ rezervujícího
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Kdo rezervuje?</h4>";
+    echo "<div class='rs-form-group'>";
+    echo "<label style='font-weight:normal;margin-right:16px'><input type='radio' name='rez_typ' value='fyzicka' checked onchange='rsRezTypChange(this.value)'> Fyzická osoba</label>";
+    echo "<label style='font-weight:normal'><input type='radio' name='rez_typ' value='pravnicka' onchange='rsRezTypChange(this.value)'> Právnická osoba</label>";
+    echo "</div>";
+
+    // Fyzická osoba
+    echo "<div id='rs-ext-fyzicka'>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno' required></div>";
+    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni' required></div>";
+    echo "</div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar' required></div>";
+    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste' required></div>";
+    echo "</div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil' required></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email' required></div>";
+    echo "</div>";
+    echo "</div>"; // fyzicka
+
+    // Právnická osoba
+    echo "<div id='rs-ext-pravnicka' style='display:none'>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>IČO *</label><div style='display:flex;gap:8px;align-items:center'><input type='text' name='pravnicka_ico' id='rs-ico' maxlength='8' style='width:130px'><button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAresLoad()'>🔍 Načíst z ARES</button></div></div>";
+    echo "</div>";
+    echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev' required></div>";
+    echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo' required></div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt' required></div>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil' required></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email' required></div>";
+    echo "</div>";
+    echo "</div>"; // pravnicka
+    echo "</div>"; // card
+
+    // Prostor + termín
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Prostor a termín</h4>";
+    echo "<div class='rs-form-group'><label>Prostor *</label><select name='ext_prostor_id' id='rs-ext-prostor' onchange='rsExtProstorChange(this.value)' required>";
+    echo "<option value=''>– vyberte –</option>";
+    foreach ($prostory as $p) echo "<option value='{$p->ID}'>" . esc_html($p->post_title) . "</option>";
+    echo "</select></div>";
+
+    echo "<div id='rs-ext-seg-wrap' style='display:none' class='rs-form-group'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-ext-seg-list'></div></div>";
+
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' required></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' required></div>";
+    echo "</div>";
+    echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet' value='1' min='1' max='500' required style='width:100px'></div>";
+
+    if (get_option('rs_vzdusne_aktivni') === '1') {
+        echo "<div class='rs-form-group' style='background:#fff8e1;border:1px solid #ffc107;border-radius:3px;padding:10px'>";
+        echo "<p style='margin:0;font-size:13px'><strong>Informace o ubytovacím poplatku:</strong> " . wp_kses_post(get_option('rs_vzdusne_info','')) . " Po potvrzení rezervace budete vyzváni k vyplnění jmen ubytovaných osob.</p>";
+        echo "</div>";
+    }
+
+    echo "<div class='rs-form-group'><label>Poznámka / dotaz</label><textarea name='ext_poznamka' rows='3'></textarea></div>";
+    echo "</div>"; // card
+
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>Odeslat žádost o rezervaci</button></div>";
+    echo "</form>";
+
+    $doplnujici = get_option('rs_doplnujici_info','');
+    if ($doplnujici) echo "<div style='margin-top:24px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($doplnujici)) . "</div>";
+
+    echo "</div>"; // .rs-wrap
+    ?>
+    <script>
+    function rsRezTypChange(val){
+        document.getElementById('rs-ext-fyzicka').style.display  = val==='fyzicka'   ? '' : 'none';
+        document.getElementById('rs-ext-pravnicka').style.display = val==='pravnicka' ? '' : 'none';
+        document.querySelectorAll('#rs-ext-fyzicka [required]').forEach(function(el){el.required = val==='fyzicka';});
+        document.querySelectorAll('#rs-ext-pravnicka [required]').forEach(function(el){el.required = val==='pravnicka';});
+    }
+    var rsExtSegData = <?php
+        $sd = [];
+        foreach ($prostory as $p) {
+            if (rs_ma_segmenty($p->ID))
+                foreach (rs_get_segmenty($p->ID) as $s)
+                    $sd[$p->ID][] = ['id'=>$s->ID,'nazev'=>$s->post_title];
+        }
+        echo json_encode($sd);
+    ?>;
+    function rsExtProstorChange(pid){
+        var wrap=document.getElementById('rs-ext-seg-wrap');
+        var list=document.getElementById('rs-ext-seg-list');
+        list.innerHTML='';
+        if(rsExtSegData[pid]){
+            rsExtSegData[pid].forEach(function(s){list.innerHTML+='<label style="display:block;margin-bottom:4px"><input type="checkbox" name="ext_segmenty[]" value="'+s.id+'"> '+s.nazev+'</label>';});
+            wrap.style.display='';
+        } else { wrap.style.display='none'; }
+    }
+    function rsAresLoad(){
+        var ico=document.getElementById('rs-ico').value.replace(/\D/g,'');
+        if(ico.length<7){alert('Zadejte IČO');return;}
+        fetch('<?php echo admin_url('admin-ajax.php'); ?>', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body:'action=rs_ares&ico='+encodeURIComponent(ico)+'&nonce=<?php echo wp_create_nonce('rs_public'); ?>'})
+        .then(r=>r.json()).then(function(d){
+            if(d.success){document.getElementById('rs-nazev').value=d.data.nazev;document.getElementById('rs-sidlo').value=d.data.sidlo;}
+            else{alert('ARES: '+d.data);}
+        });
+    }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_zpracuj_externi_formular() {
+    $rez_typ    = sanitize_key($_POST['rez_typ'] ?? 'fyzicka');
+    $prostor_id = (int)($_POST['ext_prostor_id'] ?? 0);
+    $seg_ids    = array_map('intval',(array)($_POST['ext_segmenty'] ?? []));
+    $datum_od   = sanitize_text_field($_POST['ext_datum_od'] ?? '');
+    $datum_do   = sanitize_text_field($_POST['ext_datum_do'] ?? '');
+    $pocet      = max(1,(int)($_POST['ext_pocet'] ?? 1));
+    $poznamka   = sanitize_textarea_field($_POST['ext_poznamka'] ?? '');
+
+    if (!$prostor_id || !$datum_od || !$datum_do) return rs_alert('Vyplňte prosím všechna povinná pole.','error');
+    $datum_od = str_replace('T',' ',$datum_od) . ':00';
+    $datum_do = str_replace('T',' ',$datum_do) . ':00';
+    if (strtotime($datum_od) >= strtotime($datum_do)) return rs_alert('Datum konce musí být po datu začátku.','error');
+    if (!rs_je_volno($prostor_id,$seg_ids,$datum_od,$datum_do)) return rs_alert('Zvolený termín bohužel není volný. Vyberte prosím jiný termín.','error');
+
+    $token = rs_token();
+    $rid   = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$datum_od,$datum_do,$pocet,'externi','cekajici',0,$poznamka,'', $token);
+    if (!$rid) return rs_alert('Chyba při vytváření rezervace. Zkuste to prosím znovu.','error');
+
+    update_post_meta($rid,'rs_rez_typ',$rez_typ);
+    if ($rez_typ === 'fyzicka') {
+        update_post_meta($rid,'rs_jmeno',          sanitize_text_field($_POST['fyzicka_jmeno']??''));
+        update_post_meta($rid,'rs_prijmeni',        sanitize_text_field($_POST['fyzicka_prijmeni']??''));
+        update_post_meta($rid,'rs_datum_narozeni',  sanitize_text_field($_POST['fyzicka_datum_nar']??''));
+        update_post_meta($rid,'rs_bydliste',        sanitize_text_field($_POST['fyzicka_bydliste']??''));
+        update_post_meta($rid,'rs_mobil',           sanitize_text_field($_POST['fyzicka_mobil']??''));
+        update_post_meta($rid,'rs_email',           sanitize_email($_POST['fyzicka_email']??''));
+    } else {
+        update_post_meta($rid,'rs_nazev',           sanitize_text_field($_POST['pravnicka_nazev']??''));
+        update_post_meta($rid,'rs_ico',             sanitize_text_field($_POST['pravnicka_ico']??''));
+        update_post_meta($rid,'rs_sidlo',           sanitize_text_field($_POST['pravnicka_sidlo']??''));
+        update_post_meta($rid,'rs_kontakt_jmeno',   sanitize_text_field($_POST['pravnicka_kontakt']??''));
+        update_post_meta($rid,'rs_mobil',           sanitize_text_field($_POST['pravnicka_mobil']??''));
+        update_post_meta($rid,'rs_email',           sanitize_email($_POST['pravnicka_email']??''));
+    }
+    rs_notifikuj_nova($rid);
+    return true;
+}
+
+// ═══ SPRÁVA REZERVACE PŘES TOKEN ═════════════════════════════════════════════
+
+function rs_render_sprava_rezervace(): string {
+    $token = sanitize_text_field($_GET['rs_sprava'] ?? '');
+    if (!$token) return rs_alert('Neplatný odkaz.','error');
+
+    $found = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>1,'meta_query'=>[['key'=>'rs_token','value'=>$token,'compare'=>'=']]]);
+    if (!$found) return rs_alert('Rezervace nenalezena nebo odkaz vypršel.','error');
+    $rid  = $found[0]->ID;
+    $stav = get_post_meta($rid,'rs_stav',true);
+
+    $zprava = '';
+
+    // Zrušení
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_sprava_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_sprava_' . $token)) {
+            $zprava = rs_alert('Neplatný token.','error');
+        } else {
+            $action = sanitize_key($_POST['rs_sprava_action']);
+            if ($action === 'zrusit' && $stav !== 'zrusena') {
+                update_post_meta($rid,'rs_stav','zrusena');
+                rs_notifikuj_zruseni($rid);
+                $stav   = 'zrusena';
+                $zprava = rs_alert('Rezervace byla zrušena.');
+            } elseif ($action === 'ulozit_ucastniky') {
+                $ucast = rs_uloz_ucastniky($rid);
+                if (is_array($ucast) && !empty($ucast)) {
+                    rs_notifikuj_ucastnici($rid,$ucast);
+                    $zprava = rs_alert('Seznam ubytovaných byl uložen a odeslán správci.');
+                } else {
+                    $zprava = rs_alert('Zadejte alespoň jednoho účastníka.','error');
+                }
+            }
+        }
+    }
+
+    $pid     = (int)get_post_meta($rid,'rs_prostor_id',true);
+    $segs    = (array)get_post_meta($rid,'rs_segmenty_ids',true);
+    $od      = get_post_meta($rid,'rs_datum_od',true);
+    $do_     = get_post_meta($rid,'rs_datum_do',true);
+    $pocet   = (int)get_post_meta($rid,'rs_pocet_lidi',true);
+    $cena    = (float)get_post_meta($rid,'rs_cena_celkem',true);
+    $ucast   = get_post_meta($rid,'rs_ucastnici',true);
+
+    ob_start();
+    rs_css();
+    echo "<div class='rs-wrap'>";
+    echo "<h3>Správa rezervace</h3>{$zprava}";
+
+    echo "<div class='rs-card'>";
+    echo "<h4 class='rs-card-title'>" . esc_html(get_the_title($pid)) . " – " . rs_stav_badge($stav) . "</h4>";
+    echo "<table class='rs-table' style='max-width:500px'>";
+    echo "<tr><th style='width:140px'>Prostor</th><td>" . esc_html(get_the_title($pid));
+    if ($segs) echo " (" . implode(', ', array_map('get_the_title', $segs)) . ")";
+    echo "</td></tr>";
+    echo "<tr><th>Termín</th><td>" . esc_html($od) . " – " . esc_html($do_) . "</td></tr>";
+    echo "<tr><th>Počet osob</th><td>" . $pocet . "</td></tr>";
+    echo "<tr><th>Stav</th><td>" . rs_stav_badge($stav) . "</td></tr>";
+    if ($cena > 0) echo "<tr><th>Cena</th><td>" . number_format($cena,0,'.',' ') . " Kč</td></tr>";
+    echo "</table>";
+
+    // Zrušit rezervaci
+    if ($stav === 'cekajici') {
+        echo "<form method='post' style='margin-top:16px' onsubmit='return confirm(\"Opravdu zrušit rezervaci?\")'>" . wp_nonce_field('rs_sprava_' . $token,'_wpnonce',true,false);
+        echo "<input type='hidden' name='rs_sprava_action' value='zrusit'>";
+        echo "<button type='submit' class='rs-btn rs-btn-danger'>Zrušit rezervaci</button></form>";
+    }
+    echo "</div>";
+
+    // Formulář pro seznam ubytovaných (vzdušné)
+    if (get_option('rs_vzdusne_aktivni') === '1' && $stav === 'potvrzena') {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Seznam ubytovaných osob</h4>";
+        echo "<p style='font-size:13px'>Nejpozději v den zahájení pobytu vyplňte jména a údaje ubytovaných osob pro potřeby ubytovacího poplatku.</p>";
+        echo "<form method='post'>" . wp_nonce_field('rs_sprava_' . $token,'_wpnonce',true,false);
+        echo "<input type='hidden' name='rs_sprava_action' value='ulozit_ucastniky'>";
+        $saved = is_array($ucast) ? $ucast : [[]];
+        echo "<div id='rs-ucast-list'>";
+        foreach ($saved as $i => $u) {
+            echo rs_ucastnik_row($i, $u);
+        }
+        echo "</div>";
+        echo "<button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAddUcast()' style='margin-bottom:12px'>➕ Přidat osobu</button><br>";
+        echo "<button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit seznam</button>";
+        echo "</form></div>";
+    }
+
+    echo "</div>"; // .rs-wrap
+    ?>
+    <script>
+    var rsUcastIdx = <?php echo max(count(is_array($ucast) ? $ucast : [[]]), 1); ?>;
+    var rsUcastRowTpl = <?php echo json_encode(rs_ucastnik_row('__I__', [])); ?>;
+    function rsAddUcast(){
+        var list = document.getElementById('rs-ucast-list');
+        var div = document.createElement('div');
+        div.innerHTML = rsUcastRowTpl.replace(/__I__/g, rsUcastIdx++);
+        list.appendChild(div);
+    }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_ucastnik_row(int|string $i, array $u): string {
+    $j  = esc_attr($u['jmeno'] ?? '');
+    $p  = esc_attr($u['prijmeni'] ?? '');
+    $dn = esc_attr($u['datum_narozeni'] ?? '');
+    $a  = esc_attr($u['adresa'] ?? '');
+    $nc = !empty($u['neplati']) ? 'checked' : '';
+    return "<div class='rs-segment-box' style='margin-bottom:8px'>"
+        . "<div class='rs-form-row'>"
+        . "<div class='rs-form-group'><label>Jméno</label><input type='text' name='ucast_jmeno[]' value='{$j}'></div>"
+        . "<div class='rs-form-group'><label>Příjmení</label><input type='text' name='ucast_prijmeni[]' value='{$p}'></div>"
+        . "<div class='rs-form-group'><label>Datum narození</label><input type='date' name='ucast_datum_nar[]' value='{$dn}'></div>"
+        . "<div class='rs-form-group'><label>Adresa pobytu</label><input type='text' name='ucast_adresa[]' value='{$a}'></div>"
+        . "<div class='rs-form-group' style='align-self:flex-end'><label><input type='checkbox' name='ucast_neplati[{$i}]' {$nc}> Neplatí poplatek</label></div>"
+        . "</div></div>";
+}
