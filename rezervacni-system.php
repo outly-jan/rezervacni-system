@@ -108,13 +108,23 @@ function rs_rez_jmeno(int $id): string {
 }
 
 function rs_vypocti_cenu(int $prostor_id, array $seg_ids, int $pocet_lidi, string $od, string $do): float {
-    $ids = empty($seg_ids) ? [$prostor_id] : $seg_ids;
+    $ma_seg = rs_ma_segmenty($prostor_id);
+    $rezim  = get_post_meta($prostor_id, 'rs_ceny_rezim', true) ?: 'celek';
+
+    // Use segment-level prices only when prostor has segments AND mode is 'segmenty' AND segments are specified
+    $ids = ($ma_seg && $rezim === 'segmenty' && !empty($seg_ids)) ? $seg_ids : [$prostor_id];
+
     $total = 0.0;
     foreach ($ids as $iid) {
         $za_celek = (float)get_post_meta($iid, 'rs_cena_za_celek', true);
         if ($za_celek > 0) { $total += $za_celek; continue; }
         $za_osobu = (float)get_post_meta($iid, 'rs_cena_za_osobu', true);
-        $total += $za_osobu * $pocet_lidi;
+        if ($za_osobu > 0) {
+            $castka   = $za_osobu * $pocet_lidi;
+            $cena_min = (float)get_post_meta($iid, 'rs_cena_min', true);
+            if ($cena_min > 0) $castka = max($castka, $cena_min);
+            $total += $castka;
+        }
     }
     return $total;
 }
@@ -863,17 +873,21 @@ function rs_sekce_ceny(): string {
         if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_ceny')) return rs_alert('Neplatný token.','error');
         $pid = (int)($_POST['ceny_prostor_id'] ?? 0);
         if ($pid) {
-            $za_celek = (float)str_replace(',','.', $_POST['cena_za_celek'] ?? 0);
-            $za_osobu = (float)str_replace(',','.', $_POST['cena_za_osobu'] ?? 0);
-            update_post_meta($pid,'rs_cena_za_celek',$za_celek);
-            update_post_meta($pid,'rs_cena_za_osobu',$za_osobu);
-            // Segmenty
-            $segs = rs_get_segmenty($pid);
-            foreach ($segs as $seg) {
-                $s_celek = (float)str_replace(',','.', $_POST['seg_cena_celek_'.$seg->ID] ?? 0);
-                $s_osobu = (float)str_replace(',','.', $_POST['seg_cena_osobu_'.$seg->ID] ?? 0);
-                update_post_meta($seg->ID,'rs_cena_za_celek',$s_celek);
-                update_post_meta($seg->ID,'rs_cena_za_osobu',$s_osobu);
+            $rezim = in_array($_POST['ceny_rezim'] ?? '', ['celek','segmenty']) ? $_POST['ceny_rezim'] : 'celek';
+            update_post_meta($pid, 'rs_ceny_rezim', $rezim);
+
+            $fn = fn($k) => (float)str_replace(',','.', $_POST[$k] ?? 0);
+
+            if ($rezim === 'celek' || !rs_ma_segmenty($pid)) {
+                update_post_meta($pid, 'rs_cena_za_celek', $fn('cena_za_celek'));
+                update_post_meta($pid, 'rs_cena_za_osobu', $fn('cena_za_osobu'));
+                update_post_meta($pid, 'rs_cena_min',      $fn('cena_min'));
+            } else {
+                foreach (rs_get_segmenty($pid) as $seg) {
+                    update_post_meta($seg->ID, 'rs_cena_za_celek', $fn('seg_cena_celek_'.$seg->ID));
+                    update_post_meta($seg->ID, 'rs_cena_za_osobu', $fn('seg_cena_osobu_'.$seg->ID));
+                    update_post_meta($seg->ID, 'rs_cena_min',      $fn('seg_cena_min_'.$seg->ID));
+                }
             }
             $zprava = rs_alert('Ceny uloženy.');
         }
@@ -890,35 +904,80 @@ function rs_sekce_ceny(): string {
     echo "<div class='rs-form-group'><label>Vyberte prostor</label><select name='ceny_prostor_id' onchange='this.form.submit()'>";
     foreach ($prostory as $p) {
         $sel = $p->ID === $sel_pid ? 'selected' : '';
-        echo "<option value='{$p->ID}' {$sel}>" . esc_html($p->post_title) . "</option>";
+        $typ_id = get_post_meta($p->ID,'rs_typ_id',true);
+        $label  = esc_html($p->post_title) . ($typ_id ? ' – ' . esc_html(get_the_title($typ_id)) : '');
+        echo "<option value='{$p->ID}' {$sel}>{$label}</option>";
     }
     echo "</select></div>";
 
     if ($sel_pid) {
         $ma_seg = rs_ma_segmenty($sel_pid);
-        echo "<p class='rs-text-hint' style='color:#777;font-size:13px'>Zadejte buď <strong>cenu za celek</strong> (paušál bez ohledu na počet osob), nebo <strong>cenu za osobu</strong>. Pokud zadáte obě, použije se cena za celek.</p>";
+        $rezim  = get_post_meta($sel_pid, 'rs_ceny_rezim', true) ?: 'celek';
 
-        if (!$ma_seg) {
-            $cz = number_format((float)get_post_meta($sel_pid,'rs_cena_za_celek',true),0,'.','' );
-            $co = number_format((float)get_post_meta($sel_pid,'rs_cena_za_osobu',true),0,'.','' );
-            echo "<div class='rs-form-row'>";
-            echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='cena_za_celek' value='{$cz}' min='0' step='1' style='width:150px'></div>";
-            echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='cena_za_osobu' value='{$co}' min='0' step='1' style='width:150px'></div>";
+        $hint = "<p style='font-size:13px;color:#777;margin:0 0 14px'>Zadejte <strong>cenu za celek</strong> (paušál), nebo <strong>cenu za osobu</strong> – volitelně s minimální cenou. Pokud zadáte celek i osobu, použije se celek.</p>";
+
+        if ($ma_seg) {
+            // Toggle celek vs segmenty
+            $r_celek = $rezim === 'celek' ? 'checked' : '';
+            $r_seg   = $rezim === 'segmenty' ? 'checked' : '';
+            echo "<div class='rs-form-group' style='margin-bottom:16px'>";
+            echo "<label style='margin-right:20px'><input type='radio' name='ceny_rezim' value='celek' {$r_celek} onchange='rsCenyRezim(\"celek\")'> Ceny za prostor jako celek</label>";
+            echo "<label><input type='radio' name='ceny_rezim' value='segmenty' {$r_seg} onchange='rsCenyRezim(\"segmenty\")'> Ceny za každý segment zvlášť</label>";
             echo "</div>";
-        } else {
-            echo "<p style='font-size:13px;color:#555'>Prostor má segmenty – nastavte ceny pro každý segment:</p>";
+
+            // Panel celek
+            $cz  = (float)get_post_meta($sel_pid,'rs_cena_za_celek',true);
+            $co  = (float)get_post_meta($sel_pid,'rs_cena_za_osobu',true);
+            $cm  = (float)get_post_meta($sel_pid,'rs_cena_min',true);
+            $d_celek = $rezim === 'segmenty' ? "style='display:none'" : '';
+            echo "<div id='rs-ceny-celek' {$d_celek}>";
+            echo $hint;
+            echo rs_ceny_fields('cena_za_celek','cena_za_osobu','cena_min', $cz, $co, $cm);
+            echo "</div>";
+
+            // Panel segmenty
+            $d_seg = $rezim === 'celek' ? "style='display:none'" : '';
+            echo "<div id='rs-ceny-segmenty' {$d_seg}>";
+            echo $hint;
             foreach (rs_get_segmenty($sel_pid) as $seg) {
-                $sc = number_format((float)get_post_meta($seg->ID,'rs_cena_za_celek',true),0,'.','' );
-                $so = number_format((float)get_post_meta($seg->ID,'rs_cena_za_osobu',true),0,'.','' );
-                echo "<div class='rs-segment-box'><strong>" . esc_html($seg->post_title) . "</strong><div class='rs-form-row' style='margin-top:8px'>";
-                echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='seg_cena_celek_{$seg->ID}' value='{$sc}' min='0' style='width:150px'></div>";
-                echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='seg_cena_osobu_{$seg->ID}' value='{$so}' min='0' style='width:150px'></div>";
+                $sc = (float)get_post_meta($seg->ID,'rs_cena_za_celek',true);
+                $so = (float)get_post_meta($seg->ID,'rs_cena_za_osobu',true);
+                $sm = (float)get_post_meta($seg->ID,'rs_cena_min',true);
+                echo "<div class='rs-segment-box'><strong>" . esc_html($seg->post_title) . "</strong><div style='margin-top:8px'>";
+                echo rs_ceny_fields('seg_cena_celek_'.$seg->ID, 'seg_cena_osobu_'.$seg->ID, 'seg_cena_min_'.$seg->ID, $sc, $so, $sm);
                 echo "</div></div>";
             }
+            echo "</div>";
+        } else {
+            $cz = (float)get_post_meta($sel_pid,'rs_cena_za_celek',true);
+            $co = (float)get_post_meta($sel_pid,'rs_cena_za_osobu',true);
+            $cm = (float)get_post_meta($sel_pid,'rs_cena_min',true);
+            echo $hint;
+            echo rs_ceny_fields('cena_za_celek','cena_za_osobu','cena_min', $cz, $co, $cm);
         }
+
         echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit ceny</button></div>";
     }
     echo "</form></div>";
+    ?>
+    <script>
+    function rsCenyRezim(r){
+        document.getElementById('rs-ceny-celek').style.display    = r==='celek'    ? '' : 'none';
+        document.getElementById('rs-ceny-segmenty').style.display = r==='segmenty' ? '' : 'none';
+    }
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+function rs_ceny_fields(string $n_celek, string $n_osobu, string $n_min, float $v_celek, float $v_osobu, float $v_min): string {
+    $fmt = fn($v) => $v > 0 ? number_format($v, 0, '.', '') : '';
+    ob_start();
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='{$n_celek}' value='" . $fmt($v_celek) . "' min='0' step='1' style='width:140px' placeholder='0'></div>";
+    echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='{$n_osobu}' value='" . $fmt($v_osobu) . "' min='0' step='1' style='width:140px' placeholder='0'></div>";
+    echo "<div class='rs-form-group'><label>Minimální cena (Kč)</label><input type='number' name='{$n_min}' value='" . $fmt($v_min) . "' min='0' step='1' style='width:140px' placeholder='bez minima'></div>";
+    echo "</div>";
     return ob_get_clean();
 }
 
