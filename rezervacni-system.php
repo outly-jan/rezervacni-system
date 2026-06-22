@@ -116,14 +116,15 @@ function rs_vypocti_cenu(int $prostor_id, array $seg_ids, int $pocet_lidi, strin
 
     $total = 0.0;
     foreach ($ids as $iid) {
-        $za_celek = (float)get_post_meta($iid, 'rs_cena_za_celek', true);
-        if ($za_celek > 0) { $total += $za_celek; continue; }
         $za_osobu = (float)get_post_meta($iid, 'rs_cena_za_osobu', true);
         if ($za_osobu > 0) {
             $castka   = $za_osobu * $pocet_lidi;
             $cena_min = (float)get_post_meta($iid, 'rs_cena_min', true);
             if ($cena_min > 0) $castka = max($castka, $cena_min);
             $total += $castka;
+        } else {
+            $cena_min = (float)get_post_meta($iid, 'rs_cena_min', true);
+            $total += $cena_min;
         }
     }
     return $total;
@@ -247,7 +248,7 @@ function rs_css() { ?>
 .rs-form-group{margin-bottom:14px}
 .rs-form-group>label{display:block;font-weight:600;margin-bottom:4px;font-size:13px;color:#444}
 .rs-wrap input[type=text],.rs-wrap input[type=number],.rs-wrap input[type=date],.rs-wrap input[type=time],.rs-wrap input[type=email],.rs-wrap input[type=tel],.rs-wrap textarea,.rs-wrap select{padding:5px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px;line-height:1.5;color:#2c3338;background:#fff;box-sizing:border-box;vertical-align:middle}
-.rs-form-group input:not([type=checkbox]),.rs-form-group select,.rs-form-group textarea{width:100%;max-width:420px}
+.rs-form-group input:not([type=checkbox]):not([type=radio]),.rs-form-group select,.rs-form-group textarea{width:100%;max-width:420px}
 .rs-form-group textarea{max-width:100%;resize:vertical}
 .rs-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .rs-form-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -879,12 +880,10 @@ function rs_sekce_ceny(): string {
             $fn = fn($k) => (float)str_replace(',','.', $_POST[$k] ?? 0);
 
             if ($rezim === 'celek' || !rs_ma_segmenty($pid)) {
-                update_post_meta($pid, 'rs_cena_za_celek', $fn('cena_za_celek'));
                 update_post_meta($pid, 'rs_cena_za_osobu', $fn('cena_za_osobu'));
                 update_post_meta($pid, 'rs_cena_min',      $fn('cena_min'));
             } else {
                 foreach (rs_get_segmenty($pid) as $seg) {
-                    update_post_meta($seg->ID, 'rs_cena_za_celek', $fn('seg_cena_celek_'.$seg->ID));
                     update_post_meta($seg->ID, 'rs_cena_za_osobu', $fn('seg_cena_osobu_'.$seg->ID));
                     update_post_meta($seg->ID, 'rs_cena_min',      $fn('seg_cena_min_'.$seg->ID));
                 }
@@ -914,7 +913,7 @@ function rs_sekce_ceny(): string {
         $ma_seg = rs_ma_segmenty($sel_pid);
         $rezim  = get_post_meta($sel_pid, 'rs_ceny_rezim', true) ?: 'celek';
 
-        $hint = "<p style='font-size:13px;color:#777;margin:0 0 14px'>Zadejte <strong>cenu za celek</strong> (paušál), nebo <strong>cenu za osobu</strong> – volitelně s minimální cenou. Pokud zadáte celek i osobu, použije se celek.</p>";
+        $hint = "<p style='font-size:13px;color:#777;margin:0 0 14px'>Zadejte <strong>cenu za osobu</strong> – volitelně s minimální cenou (uplatní se, pokud by cena za osoby byla nižší). Pro paušální cenu bez ohledu na počet osob stačí zadat jen minimální cenu.</p>";
 
         if ($ma_seg) {
             // Toggle celek vs segmenty
@@ -926,13 +925,12 @@ function rs_sekce_ceny(): string {
             echo "</div>";
 
             // Panel celek
-            $cz  = (float)get_post_meta($sel_pid,'rs_cena_za_celek',true);
             $co  = (float)get_post_meta($sel_pid,'rs_cena_za_osobu',true);
             $cm  = (float)get_post_meta($sel_pid,'rs_cena_min',true);
             $d_celek = $rezim === 'segmenty' ? "style='display:none'" : '';
             echo "<div id='rs-ceny-celek' {$d_celek}>";
             echo $hint;
-            echo rs_ceny_fields('cena_za_celek','cena_za_osobu','cena_min', $cz, $co, $cm);
+            echo rs_ceny_fields('cena_za_osobu','cena_min', $co, $cm);
             echo "</div>";
 
             // Panel segmenty
@@ -940,20 +938,18 @@ function rs_sekce_ceny(): string {
             echo "<div id='rs-ceny-segmenty' {$d_seg}>";
             echo $hint;
             foreach (rs_get_segmenty($sel_pid) as $seg) {
-                $sc = (float)get_post_meta($seg->ID,'rs_cena_za_celek',true);
                 $so = (float)get_post_meta($seg->ID,'rs_cena_za_osobu',true);
                 $sm = (float)get_post_meta($seg->ID,'rs_cena_min',true);
                 echo "<div class='rs-segment-box'><strong>" . esc_html($seg->post_title) . "</strong><div style='margin-top:8px'>";
-                echo rs_ceny_fields('seg_cena_celek_'.$seg->ID, 'seg_cena_osobu_'.$seg->ID, 'seg_cena_min_'.$seg->ID, $sc, $so, $sm);
+                echo rs_ceny_fields('seg_cena_osobu_'.$seg->ID, 'seg_cena_min_'.$seg->ID, $so, $sm);
                 echo "</div></div>";
             }
             echo "</div>";
         } else {
-            $cz = (float)get_post_meta($sel_pid,'rs_cena_za_celek',true);
             $co = (float)get_post_meta($sel_pid,'rs_cena_za_osobu',true);
             $cm = (float)get_post_meta($sel_pid,'rs_cena_min',true);
             echo $hint;
-            echo rs_ceny_fields('cena_za_celek','cena_za_osobu','cena_min', $cz, $co, $cm);
+            echo rs_ceny_fields('cena_za_osobu','cena_min', $co, $cm);
         }
 
         echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit ceny</button></div>";
@@ -970,11 +966,10 @@ function rs_sekce_ceny(): string {
     return ob_get_clean();
 }
 
-function rs_ceny_fields(string $n_celek, string $n_osobu, string $n_min, float $v_celek, float $v_osobu, float $v_min): string {
+function rs_ceny_fields(string $n_osobu, string $n_min, float $v_osobu, float $v_min): string {
     $fmt = fn($v) => $v > 0 ? number_format($v, 0, '.', '') : '';
     ob_start();
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Cena za celek (Kč)</label><input type='number' name='{$n_celek}' value='" . $fmt($v_celek) . "' min='0' step='1' style='width:140px' placeholder='0'></div>";
     echo "<div class='rs-form-group'><label>Cena za osobu (Kč)</label><input type='number' name='{$n_osobu}' value='" . $fmt($v_osobu) . "' min='0' step='1' style='width:140px' placeholder='0'></div>";
     echo "<div class='rs-form-group'><label>Minimální cena (Kč)</label><input type='number' name='{$n_min}' value='" . $fmt($v_min) . "' min='0' step='1' style='width:140px' placeholder='bez minima'></div>";
     echo "</div>";
@@ -985,6 +980,44 @@ function rs_ceny_fields(string $n_celek, string $n_osobu, string $n_min, float $
 
 function rs_sekce_nastaveni(): string {
     $zprava = '';
+    $zprava_oddil = '';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_oddil_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce_oddil'] ?? '', 'rs_oddily')) {
+            $zprava_oddil = rs_alert('Neplatný token.','error');
+        } else {
+            $action = sanitize_key($_POST['rs_oddil_action']);
+            $oddily = get_option('rs_oddily', []);
+            if ($action === 'pridat_oddil') {
+                $nazev = sanitize_text_field($_POST['oddil_nazev'] ?? '');
+                if ($nazev) {
+                    if (in_array($nazev, $oddily, true)) {
+                        $zprava_oddil = rs_alert('Oddíl/Družina s tímto názvem již existuje.','error');
+                    } else {
+                        $oddily[] = $nazev;
+                        sort($oddily);
+                        update_option('rs_oddily', $oddily);
+                        $zprava_oddil = rs_alert('Oddíl přidán.');
+                    }
+                }
+            } elseif ($action === 'upravit_oddil') {
+                $idx   = (int)($_POST['oddil_idx'] ?? -1);
+                $nazev = sanitize_text_field($_POST['oddil_nazev'] ?? '');
+                if ($idx >= 0 && isset($oddily[$idx]) && $nazev) {
+                    $oddily[$idx] = $nazev;
+                    sort($oddily);
+                    update_option('rs_oddily', $oddily);
+                    $zprava_oddil = rs_alert('Oddíl uložen.');
+                }
+            } elseif ($action === 'smazat_oddil') {
+                $idx = (int)($_POST['oddil_idx'] ?? -1);
+                if ($idx >= 0 && isset($oddily[$idx])) {
+                    unset($oddily[$idx]);
+                    update_option('rs_oddily', array_values($oddily));
+                    $zprava_oddil = rs_alert('Oddíl smazán.');
+                }
+            }
+        }
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_nast_action'])) {
         if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_nastaveni')) return rs_alert('Neplatný token.','error');
 
@@ -1043,6 +1076,32 @@ function rs_sekce_nastaveni(): string {
 
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit nastavení</button></div>";
     echo "</form>";
+
+    // Oddíly a Družiny
+    $oddily = get_option('rs_oddily', []);
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Oddíly a Družiny</h4>{$zprava_oddil}";
+    echo "<form id='rs-oddil-form' method='post' class='rs-form-row'>" . wp_nonce_field('rs_oddily','_wpnonce_oddil',true,false);
+    echo "<input type='hidden' id='rs-oddil-action' name='rs_oddil_action' value='pridat_oddil'>";
+    echo "<input type='hidden' id='rs-oddil-idx' name='oddil_idx' value=''>";
+    echo "<div class='rs-form-group'><label>Název</label><input type='text' name='oddil_nazev' required placeholder='např. Vlci, 2. oddíl…'></div>";
+    echo "<div class='rs-form-group' style='align-self:flex-end'>";
+    echo "<button id='rs-oddil-submit' type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button> ";
+    echo "<button id='rs-oddil-cancel' type='button' class='rs-btn rs-btn-secondary' style='display:none' onclick='rsOddiluReset()'>Zrušit</button>";
+    echo "</div></form>";
+    if ($oddily) {
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th></th></tr></thead><tbody>";
+        foreach ($oddily as $i => $o) {
+            $js_o = esc_js($o);
+            echo "<tr><td>" . esc_html($o) . "</td><td style='white-space:nowrap'>";
+            echo "<button type='button' class='rs-btn rs-btn-sm rs-btn-secondary' onclick='rsOddiluEdit({$i},\"{$js_o}\")'>✏️</button> ";
+            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_oddily','_wpnonce_oddil',true,false);
+            echo "<input type='hidden' name='rs_oddil_action' value='smazat_oddil'><input type='hidden' name='oddil_idx' value='{$i}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' onclick='return confirm(\"Smazat oddíl/družinu?\")'>🗑️</button></form>";
+            echo "</td></tr>";
+        }
+        echo "</tbody></table>";
+    }
+    echo "</div>";
     ?>
     <script>
     document.querySelector('[name=vzdusne_aktivni]').addEventListener('change', function(){
@@ -1056,6 +1115,21 @@ function rs_sekce_nastaveni(): string {
         wrap.appendChild(row);
     }
     function rsRemoveKat(btn){ btn.closest('.rs-form-row').remove(); }
+    function rsOddiluEdit(idx, nazev) {
+        document.querySelector('[name=oddil_nazev]').value = nazev;
+        document.getElementById('rs-oddil-action').value = 'upravit_oddil';
+        document.getElementById('rs-oddil-idx').value = idx;
+        document.getElementById('rs-oddil-submit').textContent = '💾 Uložit';
+        document.getElementById('rs-oddil-cancel').style.display = '';
+        document.querySelector('[name=oddil_nazev]').focus();
+    }
+    function rsOddiluReset() {
+        document.getElementById('rs-oddil-form').reset();
+        document.getElementById('rs-oddil-action').value = 'pridat_oddil';
+        document.getElementById('rs-oddil-idx').value = '';
+        document.getElementById('rs-oddil-submit').textContent = '➕ Přidat';
+        document.getElementById('rs-oddil-cancel').style.display = 'none';
+    }
     </script>
     <?php
     return ob_get_clean();
@@ -1315,10 +1389,21 @@ function rs_sekce_interni(): string {
     echo "<h3 class='rs-section-title'>Interní rezervace</h3>{$zprava}";
 
     // Formulář nové rezervace
+    $authors = get_users(['role__in' => ['author','administrator','admin_rezervacniho_systemu','spravce_rezervaci'], 'orderby' => 'display_name', 'order' => 'ASC']);
+    $oddily  = get_option('rs_oddily', []);
+    $dny     = ['1'=>'Pondělí','2'=>'Úterý','3'=>'Středa','4'=>'Čtvrtek','5'=>'Pátek','6'=>'Sobota','7'=>'Neděle'];
+
     echo "<div class='rs-card'><h4 class='rs-card-title'>➕ Nová interní rezervace</h4>";
     echo "<form method='post' id='rs-int-form'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_int_action' value='vytvorit'>";
 
+    // 1) Typ rezervace – hned nahoře
+    echo "<div class='rs-form-group' style='margin-bottom:16px'>";
+    echo "<label style='margin-right:20px'><input type='radio' name='int_mode' value='jednorazova' checked onchange='rsIntMode(\"jednorazova\")'> Jednorázová rezervace</label>";
+    echo "<label><input type='radio' name='int_mode' value='opakujici' onchange='rsIntMode(\"opakujici\")'> Opakující se rezervace</label>";
+    echo "</div>";
+
+    // 2) Prostor + segmenty
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Prostor *</label><select name='int_prostor_id' id='rs-int-prostor' onchange='rsIntProstorChange(this.value)' required>";
     echo "<option value=''>– vyberte –</option>";
@@ -1327,34 +1412,51 @@ function rs_sekce_interni(): string {
     echo "<div class='rs-form-group' id='rs-int-seg-wrap' style='display:none'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-int-seg-list'></div></div>";
     echo "</div>";
 
+    // 3) Rezervující + Oddíl
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' required></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' required></div>";
-    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet' value='1' min='1' style='width:90px'></div>";
+    echo "<div class='rs-form-group'><label>Rezervující *</label><select name='int_rezervujici_id' required>";
+    foreach ($authors as $u) {
+        $sel = $u->ID === get_current_user_id() ? 'selected' : '';
+        echo "<option value='{$u->ID}' {$sel}>" . esc_html($u->display_name) . "</option>";
+    }
+    echo "</select></div>";
+    echo "<div class='rs-form-group'><label>Oddíl / Družina</label><select name='int_oddil'>";
+    echo "<option value=''>– nevybráno –</option>";
+    foreach ($oddily as $o) echo "<option value='" . esc_attr($o) . "'>" . esc_html($o) . "</option>";
+    echo "</select></div>";
     echo "</div>";
 
-    echo "<div class='rs-form-group'><label>Poznámka</label><textarea name='int_poznamka' rows='2'></textarea></div>";
+    // 4a) Panel: Jednorázová
+    echo "<div id='rs-int-panel-jedno'>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do'></div>";
+    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet' value='1' min='1' style='width:90px'></div>";
+    echo "</div>";
+    echo "</div>";
 
-    // Opakující se rezervace
-    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_opakujici' id='rs-int-opak' onchange='rsIntOpakChange(this)'> Opakující se rezervace (např. pravidelná schůzka)</label></div>";
-    echo "<div id='rs-int-opak-detail' style='display:none;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:14px'>";
+    // 4b) Panel: Opakující se (skrytý)
+    echo "<div id='rs-int-panel-opak' style='display:none;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:14px'>";
     echo "<p style='font-size:13px;color:#555;margin-top:0'>Opakující se rezervace se vytvoří jako jednotlivé záznamy na každý vybraný den.</p>";
-    $dny = ['1'=>'Pondělí','2'=>'Úterý','3'=>'Středa','4'=>'Čtvrtek','5'=>'Pátek','6'=>'Sobota','7'=>'Neděle'];
     echo "<div class='rs-form-group'><label>Den v týdnu *</label><select name='int_den_tydne'>";
-    foreach ($dny as $k=>$v) echo "<option value='{$k}'>{$v}</option>";
+    foreach ($dny as $k => $v) echo "<option value='{$k}'>{$v}</option>";
     echo "</select></div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
     echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
+    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet_opak' value='1' min='1' style='width:90px'></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Opakovat od *</label><input type='date' name='int_opakovani_od'></div>";
     echo "<div class='rs-form-group'><label>Opakovat do *</label><input type='date' name='int_opakovani_do'></div>";
     echo "</div>";
-    echo "<div class='rs-form-group'><label>Výjimky – vynechat tato data (oddělte čárkami, formát RRRR-MM-DD)</label><input type='text' name='int_vyjimky' placeholder='2025-12-24, 2026-01-01'></div>";
-    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_prazdniny'> Automaticky vynechat prázdniny</label></div>";
-    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_svatky'> Automaticky vynechat státní svátky</label></div>";
-    echo "</div>"; // opak detail
+    echo "<div class='rs-form-group'><label>Výjimky – vynechat data (čárkami, RRRR-MM-DD)</label><input type='text' name='int_vyjimky' placeholder='2025-12-24, 2026-01-01'></div>";
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_prazdniny' checked> Automaticky vynechat prázdniny</label></div>";
+    echo "<div class='rs-form-group'><label><input type='checkbox' name='int_vynechat_svatky' checked> Automaticky vynechat státní svátky</label></div>";
+    echo "</div>";
+
+    // 5) Poznámka – vždy viditelná
+    echo "<div class='rs-form-group'><label>Poznámka</label><textarea name='int_poznamka' rows='2'></textarea></div>";
 
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>Vytvořit rezervaci</button></div>";
     echo "</form></div>";
@@ -1362,15 +1464,15 @@ function rs_sekce_interni(): string {
     // Přehled rezervací
     if ($rezervace) {
         echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Osob</th><th>Stav</th>";
-        if ($is_spravce) echo "<th>Zadal</th>";
-        echo "<th>Skupina</th><th>Akce</th></tr></thead><tbody>";
+        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Osob</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
 
         foreach ($rezervace as $r) {
             $stav    = get_post_meta($r->ID,'rs_stav',true);
             $skupina = get_post_meta($r->ID,'rs_skupina_id',true);
             $uid     = (int)get_post_meta($r->ID,'rs_wp_user_id',true);
-            $user    = get_userdata($uid);
+            $rez_uid = (int)get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: $uid;
+            $rez_user = get_userdata($rez_uid);
+            $oddil   = get_post_meta($r->ID,'rs_oddil',true);
             echo "<tr>";
             echo "<td>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
             $segs = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
@@ -1379,8 +1481,9 @@ function rs_sekce_interni(): string {
             echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
             echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
             echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
+            echo "<td>" . esc_html($rez_user ? $rez_user->display_name : '–') . "</td>";
+            echo "<td>" . esc_html($oddil ?: '–') . "</td>";
             echo "<td>" . rs_stav_badge($stav) . "</td>";
-            if ($is_spravce) echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
             echo "<td>" . ($skupina ? "<span class='rs-badge rs-badge-info' style='font-size:11px' title='ID skupiny'>" . esc_html(substr($skupina,0,8)) . "…</span>" : '–') . "</td>";
             echo "<td>";
             if ($stav !== 'zrusena' && ($uid === get_current_user_id() || $is_spravce)) {
@@ -1423,10 +1526,12 @@ function rs_sekce_interni(): string {
             wrap.style.display = 'none';
         }
     }
-    function rsIntOpakChange(cb){
-        document.getElementById('rs-int-opak-detail').style.display = cb.checked ? '' : 'none';
-        var dtInputs = document.querySelectorAll('#rs-int-form input[type=datetime-local]');
-        dtInputs.forEach(function(i){ i.required = !cb.checked; });
+    function rsIntMode(mode){
+        var jedno = document.getElementById('rs-int-panel-jedno');
+        var opak  = document.getElementById('rs-int-panel-opak');
+        jedno.style.display = mode === 'jednorazova' ? '' : 'none';
+        opak.style.display  = mode === 'opakujici'   ? '' : 'none';
+        document.querySelectorAll('#rs-int-panel-jedno input[type=datetime-local]').forEach(function(i){ i.required = mode === 'jednorazova'; });
     }
     </script>
     <?php
@@ -1438,15 +1543,17 @@ function rs_interni_zpracuj(string $action): string {
     if (!$uid) return rs_alert('Nejsi přihlášen.','error');
 
     if ($action === 'vytvorit') {
-        $prostor_id = (int)($_POST['int_prostor_id'] ?? 0);
-        $seg_ids    = array_map('intval', (array)($_POST['int_segmenty'] ?? []));
-        $pocet      = max(1,(int)($_POST['int_pocet'] ?? 1));
-        $poznamka   = sanitize_textarea_field($_POST['int_poznamka'] ?? '');
-        $opakujici  = isset($_POST['int_opakujici']);
+        $prostor_id   = (int)($_POST['int_prostor_id'] ?? 0);
+        $seg_ids      = array_map('intval', (array)($_POST['int_segmenty'] ?? []));
+        $poznamka     = sanitize_textarea_field($_POST['int_poznamka'] ?? '');
+        $mode         = ($_POST['int_mode'] ?? 'jednorazova') === 'opakujici' ? 'opakujici' : 'jednorazova';
+        $rezervujici  = (int)($_POST['int_rezervujici_id'] ?? $uid);
+        $oddil        = sanitize_text_field($_POST['int_oddil'] ?? '');
 
         if (!$prostor_id) return rs_alert('Vyberte prostor.','error');
 
-        if (!$opakujici) {
+        if ($mode === 'jednorazova') {
+            $pocet = max(1,(int)($_POST['int_pocet'] ?? 1));
             $od  = sanitize_text_field($_POST['int_datum_od'] ?? '');
             $do_ = sanitize_text_field($_POST['int_datum_do'] ?? '');
             if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
@@ -1454,23 +1561,26 @@ function rs_interni_zpracuj(string $action): string {
             $do_ = str_replace('T',' ',$do_) . ':00';
             if (strtotime($od) >= strtotime($do_)) return rs_alert('Datum konce musí být po datu začátku.','error');
             if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
-            $stav  = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
-            $rid   = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
+            $stav = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
+            $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
+            update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
+            update_post_meta($rid,'rs_oddil',$oddil);
             return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici' ? 'Čeká na schválení (víkend/svátek/prázdniny – ale bude zdarma).' : 'Automaticky potvrzena.'));
         }
 
         // Opakující se
-        $den      = (int)($_POST['int_den_tydne'] ?? 1);
-        $cas_od   = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
-        $cas_do   = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
-        $serie_od = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
-        $serie_do = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
+        $pocet        = max(1,(int)($_POST['int_pocet_opak'] ?? 1));
+        $den          = (int)($_POST['int_den_tydne'] ?? 1);
+        $cas_od       = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
+        $cas_do       = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
+        $serie_od     = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
+        $serie_do     = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
         if (!$serie_od || !$serie_do) return rs_alert('Zadejte rozsah opakování.','error');
 
-        $vyjimky_raw    = sanitize_text_field($_POST['int_vyjimky'] ?? '');
-        $vyjimky        = array_filter(array_map('trim', explode(',', $vyjimky_raw)));
-        $vynechat_praz  = isset($_POST['int_vynechat_prazdniny']);
-        $vynechat_svat  = isset($_POST['int_vynechat_svatky']);
+        $vyjimky_raw   = sanitize_text_field($_POST['int_vyjimky'] ?? '');
+        $vyjimky       = array_filter(array_map('trim', explode(',', $vyjimky_raw)));
+        $vynechat_praz = isset($_POST['int_vynechat_prazdniny']);
+        $vynechat_svat = isset($_POST['int_vynechat_svatky']);
 
         $skupina_id = rs_token();
         $created = 0; $skipped = 0;
@@ -1479,7 +1589,7 @@ function rs_interni_zpracuj(string $action): string {
 
         while ($current <= $end) {
             if ((int)date('N',$current) === $den) {
-                $d   = date('Y-m-d',$current);
+                $d    = date('Y-m-d',$current);
                 $skip = in_array($d,$vyjimky,true)
                      || ($vynechat_praz && rs_jsou_prazdniny($d))
                      || ($vynechat_svat && rs_je_svatek($d));
@@ -1488,7 +1598,9 @@ function rs_interni_zpracuj(string $action): string {
                     $do_ = $d . ' ' . $cas_do . ':00';
                     if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
                         $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
-                        rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
+                        $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
+                        update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
+                        update_post_meta($rid,'rs_oddil',$oddil);
                         $created++;
                     } else { $skipped++; }
                 }
