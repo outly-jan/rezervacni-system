@@ -726,6 +726,7 @@ function rs_sekce_prazdniny(): string {
             if ($nazev && $od && $do_) {
                 $prazdniny = get_option('rs_prazdniny', []);
                 $prazdniny[] = ['nazev' => $nazev, 'od' => $od, 'do' => $do_];
+                usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
                 update_option('rs_prazdniny', $prazdniny);
                 $zprava = rs_alert('Prázdniny přidány.');
             }
@@ -765,6 +766,7 @@ function rs_sekce_prazdniny(): string {
 
     // Prázdniny
     $prazdniny = get_option('rs_prazdniny', []);
+    usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
     echo "<div class='rs-card'><h4 class='rs-card-title'>Prázdniny</h4>";
     echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_praz_action' value='pridat_prazdniny'>";
