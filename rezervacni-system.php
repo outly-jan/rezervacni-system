@@ -973,6 +973,12 @@ function rs_sekce_ceny(): string {
     function rsCenyRezim(r){
         document.getElementById('rs-ceny-celek').style.display    = r==='celek'    ? '' : 'none';
         document.getElementById('rs-ceny-segmenty').style.display = r==='segmenty' ? '' : 'none';
+        if (r === 'segmenty') {
+            var osobu = document.querySelector('[name=cena_za_osobu]').value;
+            var min   = document.querySelector('[name=cena_min]').value;
+            document.querySelectorAll('[name^=seg_cena_osobu_]').forEach(function(i){ i.value = osobu; });
+            document.querySelectorAll('[name^=seg_cena_min_]').forEach(function(i){ i.value = min; });
+        }
     }
     </script>
     <?php
