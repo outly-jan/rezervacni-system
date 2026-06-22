@@ -271,15 +271,15 @@ function rsTab(id, btn) {
     var p=document.getElementById('rs-panel-'+id);
     if(p){p.classList.add('rs-active');}
     if(btn){btn.classList.add('rs-active');}
+    try{sessionStorage.setItem('rs_tab',id);}catch(e){}
 }
 document.addEventListener('DOMContentLoaded',function(){
-    var first=document.querySelector('.rs-menu button');
-    if(first){first.click();}
+    var tabId=null;
     var hash=location.hash;
-    if(hash.startsWith('#rs-')){
-        var btn=document.querySelector('.rs-menu button[data-tab="'+hash.slice(4)+'"]');
-        if(btn)btn.click();
-    }
+    if(hash.startsWith('#rs-')){tabId=hash.slice(4);}
+    if(!tabId){try{tabId=sessionStorage.getItem('rs_tab');}catch(e){}}
+    var activBtn=tabId?document.querySelector('.rs-menu button[data-tab="'+tabId+'"]'):null;
+    if(activBtn){activBtn.click();}else{var first=document.querySelector('.rs-menu button');if(first)first.click();}
 });
 </script>
 <?php }
@@ -742,6 +742,31 @@ function rs_sekce_prazdniny(): string {
                     $zprava = rs_alert('Prázdniny přidány.');
                 }
             }
+        } elseif ($action === 'upravit_prazdniny') {
+            $idx   = (int)($_POST['praz_idx'] ?? -1);
+            $nazev = sanitize_text_field($_POST['praz_nazev'] ?? '');
+            $od    = sanitize_text_field($_POST['praz_od'] ?? '');
+            $do_   = sanitize_text_field($_POST['praz_do'] ?? '');
+            if ($idx >= 0 && $nazev && $od && $do_) {
+                $prazdniny = get_option('rs_prazdniny', []);
+                $duplicitni_nazev = false;
+                $prekryv = false;
+                foreach ($prazdniny as $i => $p) {
+                    if ($i === $idx) continue;
+                    if (strcasecmp($p['nazev'], $nazev) === 0) $duplicitni_nazev = true;
+                    if ($od <= $p['do'] && $do_ >= $p['od']) $prekryv = true;
+                }
+                if ($prekryv) {
+                    $zprava = rs_alert('Termín se překrývá s existujícími prázdninami. Zkontrolujte data.', 'error');
+                } elseif ($duplicitni_nazev) {
+                    $zprava = rs_alert('Prázdniny s názvem „' . esc_html($nazev) . '" již existují. Doplňte rok, např. „' . esc_html($nazev) . ' 2027".', 'error');
+                } else {
+                    $prazdniny[$idx] = ['nazev' => $nazev, 'od' => $od, 'do' => $do_];
+                    usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
+                    update_option('rs_prazdniny', $prazdniny);
+                    $zprava = rs_alert('Prázdniny uloženy.');
+                }
+            }
         } elseif ($action === 'smazat_prazdniny') {
             $idx = (int)($_POST['praz_idx'] ?? -1);
             $prazdniny = get_option('rs_prazdniny', []);
@@ -780,24 +805,53 @@ function rs_sekce_prazdniny(): string {
     $prazdniny = get_option('rs_prazdniny', []);
     usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
     echo "<div class='rs-card'><h4 class='rs-card-title'>Prázdniny</h4>";
-    echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
-    echo "<input type='hidden' name='rs_praz_action' value='pridat_prazdniny'>";
+    echo "<form id='rs-praz-form' method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+    echo "<input type='hidden' id='rs-praz-action' name='rs_praz_action' value='pridat_prazdniny'>";
+    echo "<input type='hidden' id='rs-praz-idx' name='praz_idx' value=''>";
     echo "<div class='rs-form-group'><label>Název</label><input type='text' name='praz_nazev' required placeholder='např. Letní prázdniny 2025'></div>";
     echo "<div class='rs-form-group'><label>Od</label><input type='date' name='praz_od' required style='width:160px'></div>";
     echo "<div class='rs-form-group'><label>Do</label><input type='date' name='praz_do' required style='width:160px'></div>";
-    echo "<div class='rs-form-group' style='align-self:flex-end'><button type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button></div>";
-    echo "</form>";
+    echo "<div class='rs-form-group' style='align-self:flex-end'>";
+    echo "<button id='rs-praz-submit' type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button> ";
+    echo "<button id='rs-praz-cancel' type='button' class='rs-btn rs-btn-secondary' style='display:none' onclick='rsPrazReset()'>Zrušit</button>";
+    echo "</div></form>";
     if ($prazdniny) {
         echo "<table class='rs-table'><thead><tr><th>Název</th><th>Od</th><th>Do</th><th></th></tr></thead><tbody>";
         foreach ($prazdniny as $i => $p) {
-            echo "<tr><td>" . esc_html($p['nazev']) . "</td><td>" . esc_html($p['od']) . "</td><td>" . esc_html($p['do']) . "</td><td>";
+            $js_nazev = esc_js($p['nazev']);
+            echo "<tr><td>" . esc_html($p['nazev']) . "</td><td>" . esc_html($p['od']) . "</td><td>" . esc_html($p['do']) . "</td><td style='white-space:nowrap'>";
+            echo "<button type='button' class='rs-btn rs-btn-sm rs-btn-secondary' onclick='rsPrazEdit({$i},\"{$js_nazev}\",\"{$p['od']}\",\"{$p['do']}\")'>✏️</button> ";
             echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
             echo "<input type='hidden' name='rs_praz_action' value='smazat_prazdniny'><input type='hidden' name='praz_idx' value='{$i}'>";
-            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' onclick='return confirm(\"Smazat prázdniny?\")'>🗑️</button></form></td></tr>";
         }
         echo "</tbody></table>";
     }
     echo "</div>";
+    ?>
+    <script>
+    function rsPrazEdit(idx, nazev, od, do_) {
+        var form = document.getElementById('rs-praz-form');
+        form.querySelector('[name=praz_nazev]').value = nazev;
+        form.querySelector('[name=praz_od]').value = od;
+        form.querySelector('[name=praz_do]').value = do_;
+        document.getElementById('rs-praz-action').value = 'upravit_prazdniny';
+        document.getElementById('rs-praz-idx').value = idx;
+        document.getElementById('rs-praz-submit').textContent = '💾 Uložit změny';
+        document.getElementById('rs-praz-cancel').style.display = '';
+        form.querySelector('[name=praz_nazev]').focus();
+        form.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }
+    function rsPrazReset() {
+        var form = document.getElementById('rs-praz-form');
+        form.reset();
+        document.getElementById('rs-praz-action').value = 'pridat_prazdniny';
+        document.getElementById('rs-praz-idx').value = '';
+        document.getElementById('rs-praz-submit').textContent = '➕ Přidat';
+        document.getElementById('rs-praz-cancel').style.display = 'none';
+    }
+    </script>
+    <?php
     return ob_get_clean();
 }
 
