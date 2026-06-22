@@ -1,7 +1,7 @@
 <?php
 // Token musí odpovídat hodnotě GitHub secret DEPLOY_SECRET.
 // Po nahrání na server změň CHANGE_ME na náhodný řetězec.
-define('DEPLOY_SECRET', 'CHANGE_ME');
+define('DEPLOY_SECRET', 'UqU7tlOxzc');
 
 if (($_GET['token'] ?? '') !== DEPLOY_SECRET) {
     http_response_code(403);
