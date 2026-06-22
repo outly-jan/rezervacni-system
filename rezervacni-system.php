@@ -237,7 +237,7 @@ function rs_css() { ?>
 .rs-form-group{margin-bottom:14px}
 .rs-form-group>label{display:block;font-weight:600;margin-bottom:4px;font-size:13px;color:#444}
 .rs-wrap input[type=text],.rs-wrap input[type=number],.rs-wrap input[type=date],.rs-wrap input[type=time],.rs-wrap input[type=email],.rs-wrap input[type=tel],.rs-wrap textarea,.rs-wrap select{padding:5px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px;line-height:1.5;color:#2c3338;background:#fff;box-sizing:border-box;vertical-align:middle}
-.rs-form-group input,.rs-form-group select,.rs-form-group textarea{width:100%;max-width:420px}
+.rs-form-group input:not([type=checkbox]),.rs-form-group select,.rs-form-group textarea{width:100%;max-width:420px}
 .rs-form-group textarea{max-width:100%;resize:vertical}
 .rs-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .rs-form-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
