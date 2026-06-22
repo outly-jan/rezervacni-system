@@ -57,7 +57,7 @@ function rs_alert(string $text, string $type = 'success'): string {
 function rs_token(): string { return bin2hex(random_bytes(20)); }
 
 function rs_je_vikend(string $d): bool    { return (int)date('N', strtotime($d)) >= 6; }
-function rs_je_svatek(string $d): bool    { return in_array(substr($d,0,10), get_option('rs_statni_svatky', []), true); }
+function rs_je_svatek(string $d): bool    { return in_array(substr($d,5,5), get_option('rs_statni_svatky', []), true); }
 function rs_jsou_prazdniny(string $d): bool {
     $ts = strtotime(substr($d,0,10));
     foreach (get_option('rs_prazdniny', []) as $p)
@@ -714,11 +714,15 @@ function rs_sekce_prazdniny(): string {
         $action = sanitize_key($_POST['rs_praz_action']);
 
         if ($action === 'pridat_svatek') {
-            $datum = sanitize_text_field($_POST['svatek_datum'] ?? '');
+            $den   = (int)($_POST['svatek_den']   ?? 0);
+            $mesic = (int)($_POST['svatek_mesic'] ?? 0);
             $nazev = sanitize_text_field($_POST['svatek_nazev'] ?? '');
+            $datum = ($den >= 1 && $den <= 31 && $mesic >= 1 && $mesic <= 12)
+                     ? sprintf('%02d-%02d', $mesic, $den) : '';
             if ($datum && $nazev) {
                 $svatky = get_option('rs_statni_svatky_data', []);
                 $svatky[$datum] = $nazev;
+                ksort($svatky);
                 update_option('rs_statni_svatky_data', $svatky);
                 update_option('rs_statni_svatky', array_keys($svatky));
                 $zprava = rs_alert('Svátek přidán.');
@@ -792,20 +796,29 @@ function rs_sekce_prazdniny(): string {
 
     // Státní svátky
     $svatky = get_option('rs_statni_svatky_data', []);
+    $mesice_cz = ['1'=>'Leden','2'=>'Únor','3'=>'Březen','4'=>'Duben','5'=>'Květen','6'=>'Červen','7'=>'Červenec','8'=>'Srpen','9'=>'Září','10'=>'Říjen','11'=>'Listopad','12'=>'Prosinec'];
     echo "<div class='rs-card'><h4 class='rs-card-title'>Státní svátky</h4>";
+    echo "<p style='font-size:13px;color:#777;margin:0 0 12px'>Svátky se opakují každý rok – zadejte jen den a měsíc.</p>";
     echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_praz_action' value='pridat_svatek'>";
-    echo "<div class='rs-form-group'><label>Datum</label><input type='date' name='svatek_datum' required style='width:160px'></div>";
+    echo "<div class='rs-form-group'><label>Den</label><select name='svatek_den' required style='width:80px'><option value=''>–</option>";
+    for ($d=1;$d<=31;$d++) echo "<option value='{$d}'>{$d}.</option>";
+    echo "</select></div>";
+    echo "<div class='rs-form-group'><label>Měsíc</label><select name='svatek_mesic' required style='width:130px'><option value=''>–</option>";
+    foreach ($mesice_cz as $k=>$v) echo "<option value='{$k}'>{$v}</option>";
+    echo "</select></div>";
     echo "<div class='rs-form-group'><label>Název svátku</label><input type='text' name='svatek_nazev' required></div>";
     echo "<div class='rs-form-group' style='align-self:flex-end'><button type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button></div>";
     echo "</form>";
     if ($svatky) {
         ksort($svatky);
         echo "<table class='rs-table'><thead><tr><th>Datum</th><th>Název</th><th></th></tr></thead><tbody>";
-        foreach ($svatky as $d => $n) {
-            echo "<tr><td>" . esc_html($d) . "</td><td>" . esc_html($n) . "</td><td>";
+        foreach ($svatky as $klic => $n) {
+            [$mm,$dd] = explode('-', $klic) + ['01','01'];
+            $popis = (int)$dd . '. ' . ($mesice_cz[(int)$mm] ?? $mm);
+            echo "<tr><td>" . esc_html($popis) . "</td><td>" . esc_html($n) . "</td><td>";
             echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
-            echo "<input type='hidden' name='rs_praz_action' value='smazat_svatek'><input type='hidden' name='svatek_datum' value='" . esc_attr($d) . "'>";
+            echo "<input type='hidden' name='rs_praz_action' value='smazat_svatek'><input type='hidden' name='svatek_datum' value='" . esc_attr($klic) . "'>";
             echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
         }
         echo "</tbody></table>";
