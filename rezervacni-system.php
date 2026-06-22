@@ -56,8 +56,24 @@ function rs_alert(string $text, string $type = 'success'): string {
 
 function rs_token(): string { return bin2hex(random_bytes(20)); }
 
+function rs_vypocti_velikonoce(int $rok): array {
+    $a = $rok % 19; $b = intdiv($rok,100); $c = $rok % 100;
+    $d = intdiv($b,4); $e = $b % 4; $f = intdiv($b+8,25);
+    $g = intdiv($b-$f+1,3); $h = (19*$a+$b-$d-$g+15) % 30;
+    $i = intdiv($c,4); $k = $c % 4; $l = (32+2*$e+2*$i-$h-$k) % 7;
+    $m = intdiv($a+11*$h+22*$l,451);
+    $month = intdiv($h+$l-7*$m+114,31);
+    $day   = (($h+$l-7*$m+114) % 31)+1;
+    $ned   = mktime(0,0,0,$month,$day,$rok);
+    return [date('Y-m-d',strtotime('-2 days',$ned)), date('Y-m-d',strtotime('+1 day',$ned))];
+}
+
 function rs_je_vikend(string $d): bool    { return (int)date('N', strtotime($d)) >= 6; }
-function rs_je_svatek(string $d): bool    { return in_array(substr($d,5,5), get_option('rs_statni_svatky', []), true); }
+function rs_je_svatek(string $d): bool {
+    $date = substr($d, 0, 10);
+    if (in_array(substr($date, 5), get_option('rs_statni_svatky', []), true)) return true;
+    return array_key_exists($date, get_option('rs_velikonoce', []));
+}
 function rs_jsou_prazdniny(string $d): bool {
     $ts = strtotime(substr($d,0,10));
     foreach (get_option('rs_prazdniny', []) as $p)
@@ -734,6 +750,23 @@ function rs_sekce_prazdniny(): string {
             update_option('rs_statni_svatky_data', $svatky);
             update_option('rs_statni_svatky', array_keys($svatky));
             $zprava = rs_alert('Svátek odstraněn.');
+        } elseif ($action === 'pridat_velikonoce') {
+            $rok = (int)($_POST['velikonoce_rok'] ?? 0);
+            if ($rok >= 2020 && $rok <= 2060) {
+                [$patek, $pondeli] = rs_vypocti_velikonoce($rok);
+                $vel = get_option('rs_velikonoce', []);
+                $vel[$patek]   = 'Velký pátek';
+                $vel[$pondeli] = 'Velikonoční pondělí';
+                ksort($vel);
+                update_option('rs_velikonoce', $vel);
+                $zprava = rs_alert("Přidány Velikonoce {$rok}: Velký pátek ({$patek}), Velikonoční pondělí ({$pondeli}).");
+            }
+        } elseif ($action === 'smazat_velikonoc') {
+            $datum = sanitize_text_field($_POST['velikonoc_datum'] ?? '');
+            $vel = get_option('rs_velikonoce', []);
+            unset($vel[$datum]);
+            update_option('rs_velikonoce', $vel);
+            $zprava = rs_alert('Svátek odstraněn.');
         } elseif ($action === 'pridat_prazdniny') {
             $nazev = sanitize_text_field($_POST['praz_nazev'] ?? '');
             $od    = sanitize_text_field($_POST['praz_od'] ?? '');
@@ -819,6 +852,37 @@ function rs_sekce_prazdniny(): string {
             echo "<tr><td>" . esc_html($popis) . "</td><td>" . esc_html($n) . "</td><td>";
             echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
             echo "<input type='hidden' name='rs_praz_action' value='smazat_svatek'><input type='hidden' name='svatek_datum' value='" . esc_attr($klic) . "'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
+        }
+        echo "</tbody></table>";
+    }
+    echo "</div>";
+
+    // Velikonoce
+    $vel = get_option('rs_velikonoce', []);
+    ksort($vel);
+    $rok_nyni = (int)date('Y');
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Velikonoce (Velký pátek &amp; Velikonoční pondělí)</h4>";
+    echo "<p style='font-size:13px;color:#777;margin:0 0 12px'>Data Velikonoc se mění každý rok – přidejte rok a data se vypočítají automaticky.</p>";
+    echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_praz_action' value='pridat_velikonoce'>";
+    echo "<div class='rs-form-group'><label>Rok</label><select name='velikonoce_rok' style='width:110px'>";
+    for ($y = $rok_nyni - 1; $y <= $rok_nyni + 5; $y++) {
+        $already = false;
+        [$pf,$pm] = rs_vypocti_velikonoce($y);
+        if (isset($vel[$pf]) && isset($vel[$pm])) $already = true;
+        $label = $y . ($already ? ' ✓' : '');
+        echo "<option value='{$y}'" . ($y === $rok_nyni ? ' selected' : '') . ">{$label}</option>";
+    }
+    echo "</select></div>";
+    echo "<div class='rs-form-group' style='align-self:flex-end'><button type='submit' class='rs-btn rs-btn-primary'>➕ Přidat Velikonoce</button></div>";
+    echo "</form>";
+    if ($vel) {
+        echo "<table class='rs-table'><thead><tr><th>Datum</th><th>Název</th><th></th></tr></thead><tbody>";
+        foreach ($vel as $datum => $nazev) {
+            echo "<tr><td>" . esc_html($datum) . "</td><td>" . esc_html($nazev) . "</td><td>";
+            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
+            echo "<input type='hidden' name='rs_praz_action' value='smazat_velikonoc'><input type='hidden' name='velikonoc_datum' value='" . esc_attr($datum) . "'>";
             echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form></td></tr>";
         }
         echo "</tbody></table>";
