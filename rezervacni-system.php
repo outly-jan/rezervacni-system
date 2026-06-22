@@ -402,75 +402,107 @@ function rs_sekce_prostory(): string {
         $zprava = rs_prostor_zpracuj($action);
     }
 
-    $prostory = rs_get_prostory();
-    $typy     = get_posts(['post_type'=>'rs_typ','numberposts'=>-1,'orderby'=>'title','order'=>'ASC']);
-    $edit_id  = (int)($_GET['rs_edit_prostor'] ?? 0);
-    $edit     = $edit_id ? get_post($edit_id) : null;
+    $prostory    = rs_get_prostory();
+    $typy        = get_posts(['post_type'=>'rs_typ','numberposts'=>-1,'orderby'=>'title','order'=>'ASC']);
+    $edit_id     = (int)($_GET['rs_edit_prostor'] ?? 0);
+    $edit        = $edit_id ? get_post($edit_id) : null;
     $edit_seg_id = (int)($_GET['rs_edit_seg'] ?? 0);
+    $add_mode    = !empty($_GET['rs_add_prostor']);
 
     ob_start();
     echo "<h3 class='rs-section-title'>Prostory & Segmenty</h3>{$zprava}";
 
-    // === Form: prostor ===
-    $ma_seg = $edit ? (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1') : false;
-    echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($edit ? '✏️ Upravit prostor' : '➕ Přidat prostor') . "</h4>";
-    echo "<form method='post' enctype='multipart/form-data'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
-    echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit ? 'upravit_prostor' : 'pridat_prostor') . "'>";
-    if ($edit) echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
-
-    echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Název prostoru *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
-    echo "<div class='rs-form-group'><label>Typ prostoru</label><select name='prostor_typ'>";
-    echo "<option value=''>– bez typu –</option>";
-    foreach ($typy as $t) {
-        $sel = ($edit && get_post_meta($edit->ID,'rs_typ_id',true) == $t->ID) ? 'selected' : '';
-        echo "<option value='{$t->ID}' {$sel}>" . esc_html($t->post_title) . "</option>";
+    // === Seznam prostorů (vždy nahoře) ===
+    $url_base = remove_query_arg(['rs_edit_prostor','rs_edit_seg','rs_add_prostor']);
+    if ($prostory) {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostorů</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+        foreach ($prostory as $p) {
+            $typ_id = get_post_meta($p->ID,'rs_typ_id',true);
+            $typ_n  = $typ_id ? get_the_title($typ_id) : '–';
+            $segs   = rs_get_segmenty($p->ID);
+            if (rs_ma_segmenty($p->ID)) {
+                $kap_sum = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $segs));
+                $kap_txt = $kap_sum ? $kap_sum . ' os.' : '–';
+            } else {
+                $kap_val = get_post_meta($p->ID,'rs_kapacita',true);
+                $kap_txt = $kap_val ? esc_html($kap_val).' os.' : '–';
+            }
+            echo "<tr>";
+            echo "<td>" . esc_html($p->post_title) . "</td>";
+            echo "<td>" . esc_html($typ_n) . "</td>";
+            echo "<td>" . (rs_ma_segmenty($p->ID) ? count($segs) . ' segmentů' : '–') . "</td>";
+            echo "<td>" . $kap_txt . "</td>";
+            echo "<td>";
+            echo "<a href='" . esc_url(add_query_arg('rs_edit_prostor',$p->ID,$url_base)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
+            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat prostor? Možné jen bez rezervací.\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+            echo "<input type='hidden' name='rs_prostor_action' value='smazat_prostor'><input type='hidden' name='prostor_id' value='{$p->ID}'>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form>";
+            echo "</td></tr>";
+        }
+        echo "</tbody></table></div>";
     }
-    echo "</select></div></div>";
 
-    echo "<div class='rs-form-group'><label>Popis</label><textarea name='prostor_popis' rows='3'>" . esc_textarea($edit ? $edit->post_content : '') . "</textarea></div>";
+    // === Formulář prostoru (jen při editaci nebo přidávání) ===
+    if ($edit || $add_mode) {
+        $ma_seg = $edit ? (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1') : false;
+        echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($edit ? '✏️ Upravit prostor' : '➕ Přidat prostor') . "</h4>";
+        echo "<form method='post' enctype='multipart/form-data'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
+        echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit ? 'upravit_prostor' : 'pridat_prostor') . "'>";
+        if ($edit) echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
 
-    // Segmenty toggle
-    $ma_seg_checked = $ma_seg ? 'checked' : '';
-    echo "<div class='rs-form-group'><label><input type='checkbox' name='prostor_ma_segmenty' {$ma_seg_checked} onchange='rsToggleSegmenty(this)'> Prostor má segmenty (místnosti)</label></div>";
+        echo "<div class='rs-form-row'>";
+        echo "<div class='rs-form-group'><label>Název prostoru *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
+        echo "<div class='rs-form-group'><label>Typ prostoru</label><select name='prostor_typ'>";
+        echo "<option value=''>– bez typu –</option>";
+        foreach ($typy as $t) {
+            $sel = ($edit && get_post_meta($edit->ID,'rs_typ_id',true) == $t->ID) ? 'selected' : '';
+            echo "<option value='{$t->ID}' {$sel}>" . esc_html($t->post_title) . "</option>";
+        }
+        echo "</select></div></div>";
 
-    // Bez segmentů: rozloha, kapacita, doplňující info
-    $seg_none_style = $ma_seg ? "style='display:none'" : '';
-    echo "<div id='rs-noseg' {$seg_none_style}>";
-    $roz   = esc_attr($edit ? get_post_meta($edit->ID,'rs_rozloha',true) : '');
-    $kap   = esc_attr($edit ? get_post_meta($edit->ID,'rs_kapacita',true) : '');
-    $dop   = esc_textarea($edit ? get_post_meta($edit->ID,'rs_doplnujici',true) : '');
-    echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Rozloha (m²)</label><input type='number' name='prostor_rozloha' value='{$roz}' min='0' style='width:100px'></div>";
-    echo "<div class='rs-form-group'><label>Kapacita (osob k přenocování)</label><input type='number' name='prostor_kapacita' value='{$kap}' min='0' style='width:100px'></div>";
-    echo "</div>";
-    echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='prostor_doplnujici' rows='3'>{$dop}</textarea></div>";
-    echo "</div>"; // #rs-noseg
+        echo "<div class='rs-form-group'><label>Popis</label><textarea name='prostor_popis' rows='3'>" . esc_textarea($edit ? $edit->post_content : '') . "</textarea></div>";
 
-    // Fotky
-    $fotky = $edit ? (array)get_post_meta($edit->ID,'rs_fotky',true) : [];
-    echo rs_foto_field('prostor', $fotky);
+        $ma_seg_checked = $ma_seg ? 'checked' : '';
+        echo "<div class='rs-form-group'><label><input type='checkbox' name='prostor_ma_segmenty' {$ma_seg_checked} onchange='rsToggleSegmenty(this)'> Prostor má segmenty (místnosti)</label></div>";
 
-    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit změny' : '➕ Přidat prostor') . "</button>";
-    if ($edit) echo "<a href='" . esc_url(remove_query_arg(['rs_edit_prostor','rs_edit_seg'])) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
-    echo "</div></form></div>";
+        $seg_none_style = $ma_seg ? "style='display:none'" : '';
+        echo "<div id='rs-noseg' {$seg_none_style}>";
+        $roz = esc_attr($edit ? get_post_meta($edit->ID,'rs_rozloha',true) : '');
+        $kap = esc_attr($edit ? get_post_meta($edit->ID,'rs_kapacita',true) : '');
+        $dop = esc_textarea($edit ? get_post_meta($edit->ID,'rs_doplnujici',true) : '');
+        echo "<div class='rs-form-row'>";
+        echo "<div class='rs-form-group'><label>Rozloha (m²)</label><input type='number' name='prostor_rozloha' value='{$roz}' min='0' style='width:100px'></div>";
+        echo "<div class='rs-form-group'><label>Kapacita (osob k přenocování)</label><input type='number' name='prostor_kapacita' value='{$kap}' min='0' style='width:100px'></div>";
+        echo "</div>";
+        echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='prostor_doplnujici' rows='3'>{$dop}</textarea></div>";
+        echo "</div>"; // #rs-noseg
 
-    // === Segmenty přidání (pokud prostor má segmenty) ===
-    if ($edit && $ma_seg) {
+        $fotky = $edit ? (array)get_post_meta($edit->ID,'rs_fotky',true) : [];
+        echo rs_foto_field('prostor', $fotky);
+
+        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit změny' : '➕ Přidat prostor') . "</button>";
+        echo "<a href='" . esc_url($url_base) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
+        echo "</div></form></div>";
+    } else {
+        echo "<a href='" . esc_url(add_query_arg('rs_add_prostor','1',$url_base)) . "' class='rs-btn rs-btn-primary' style='margin-top:8px'>➕ Přidat prostor</a>";
+    }
+
+    // === Segmenty (jen při editaci prostoru se segmenty) ===
+    if ($edit && (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1')) {
+        $ma_seg   = true;
         $segmenty = rs_get_segmenty($edit->ID);
         $edit_seg = $edit_seg_id ? get_post($edit_seg_id) : null;
 
         echo "<div class='rs-card'><h4 class='rs-card-title'>Segmenty prostoru: " . esc_html($edit->post_title) . "</h4>";
 
-        // Form: add/edit segment
         echo "<form method='post'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
         echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit_seg ? 'upravit_segment' : 'pridat_segment') . "'>";
         echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
         if ($edit_seg) echo "<input type='hidden' name='segment_id' value='{$edit_seg->ID}'>";
 
-        $s_roz = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_rozloha',true) : '');
-        $s_kap = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_kapacita',true) : '');
-        $s_dop = esc_textarea($edit_seg ? get_post_meta($edit_seg->ID,'rs_doplnujici',true) : '');
+        $s_roz  = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_rozloha',true) : '');
+        $s_kap  = esc_attr($edit_seg ? get_post_meta($edit_seg->ID,'rs_kapacita',true) : '');
+        $s_dop  = esc_textarea($edit_seg ? get_post_meta($edit_seg->ID,'rs_doplnujici',true) : '');
         $s_fotky = $edit_seg ? (array)get_post_meta($edit_seg->ID,'rs_fotky',true) : [];
 
         echo "<h5>" . ($edit_seg ? '✏️ Upravit segment' : '➕ Přidat segment') . "</h5>";
@@ -486,7 +518,6 @@ function rs_sekce_prostory(): string {
         if ($edit_seg) echo "<a href='" . esc_url(remove_query_arg('rs_edit_seg')) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
         echo "</div></form>";
 
-        // List segments
         if ($segmenty) {
             echo "<table class='rs-table' style='margin-top:16px'><thead><tr><th>Název</th><th>Rozloha</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
             foreach ($segmenty as $seg) {
@@ -507,29 +538,6 @@ function rs_sekce_prostory(): string {
             echo "<p style='color:#777;font-size:13px'>Zatím žádné segmenty.</p>";
         }
         echo "</div>"; // card
-    }
-
-    // === Seznam prostorů ===
-    if ($prostory) {
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostorů</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
-        foreach ($prostory as $p) {
-            $typ_id  = get_post_meta($p->ID,'rs_typ_id',true);
-            $typ_n   = $typ_id ? get_the_title($typ_id) : '–';
-            $segs    = rs_get_segmenty($p->ID);
-            $kap     = get_post_meta($p->ID,'rs_kapacita',true);
-            echo "<tr>";
-            echo "<td>" . esc_html($p->post_title) . "</td>";
-            echo "<td>" . esc_html($typ_n) . "</td>";
-            echo "<td>" . (rs_ma_segmenty($p->ID) ? count($segs) . ' segmentů' : '–') . "</td>";
-            echo "<td>" . ($kap ? esc_html($kap).' os.' : '–') . "</td>";
-            echo "<td>";
-            echo "<a href='" . esc_url(add_query_arg('rs_edit_prostor',$p->ID,remove_query_arg('rs_edit_seg'))) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
-            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat prostor? Možné jen bez rezervací.\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
-            echo "<input type='hidden' name='rs_prostor_action' value='smazat_prostor'><input type='hidden' name='prostor_id' value='{$p->ID}'>";
-            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>🗑️</button></form>";
-            echo "</td></tr>";
-        }
-        echo "</tbody></table></div>";
     }
 
     // JS pro toggle segmentů a WP media uploader
@@ -591,6 +599,12 @@ function rs_foto_field(string $field, array $existing_ids): string {
     return ob_get_clean();
 }
 
+function rs_prepocitej_kapacitu_prostoru(int $pid): void {
+    $segs = rs_get_segmenty($pid);
+    $sum  = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $segs));
+    update_post_meta($pid, 'rs_kapacita', $sum ?: '');
+}
+
 function rs_prostor_zpracuj(string $action): string {
     switch ($action) {
         case 'pridat_prostor': {
@@ -646,24 +660,29 @@ function rs_prostor_zpracuj(string $action): string {
             update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
             update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
             rs_uloz_fotky($sid, 'segment');
+            rs_prepocitej_kapacitu_prostoru($pid);
             return rs_alert('Segment přidán.');
         }
         case 'upravit_segment': {
             $sid = (int)($_POST['segment_id'] ?? 0);
+            $pid = (int)($_POST['prostor_id'] ?? 0);
             if (!$sid) return '';
             wp_update_post(['ID'=>$sid,'post_title'=>sanitize_text_field($_POST['segment_nazev']??''),'post_content'=>sanitize_textarea_field($_POST['segment_popis']??'')]);
             update_post_meta($sid,'rs_rozloha',  (int)($_POST['segment_rozloha']??0));
             update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
             update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
             rs_uloz_fotky($sid, 'segment');
+            if ($pid) rs_prepocitej_kapacitu_prostoru($pid);
             return rs_alert('Segment uložen.');
         }
         case 'smazat_segment': {
             $sid = (int)($_POST['segment_id'] ?? 0);
+            $pid = (int)($_POST['prostor_id'] ?? 0);
             if (!$sid) return '';
             $rez = get_posts(['post_type'=>'rs_rezervace','numberposts'=>1,'fields'=>'ids','meta_query'=>[['key'=>'rs_segmenty_ids','value'=>$sid,'compare'=>'LIKE']]]);
             if ($rez) return rs_alert('Nelze smazat – segment má rezervace.','error');
             wp_delete_post($sid, true);
+            if ($pid) rs_prepocitej_kapacitu_prostoru($pid);
             return rs_alert('Segment smazán.');
         }
     }
