@@ -1764,7 +1764,7 @@ function rs_kalendar_sc(array $atts): string {
         ['key'=>'rs_datum_do','value'=>$mesic_od,'compare'=>'>='],
     ]]);
 
-    $is_privileged = rs_over('vedeni', wp_get_current_user());
+    $is_privileged = rs_ma_pravo('vedeni');
 
     // Sestavit mapu obsazenosti + detail dat pro JS
     $busy     = []; // [tid][den] = 'full'|'partial'
