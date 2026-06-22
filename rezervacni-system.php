@@ -725,10 +725,22 @@ function rs_sekce_prazdniny(): string {
             $do_   = sanitize_text_field($_POST['praz_do'] ?? '');
             if ($nazev && $od && $do_) {
                 $prazdniny = get_option('rs_prazdniny', []);
-                $prazdniny[] = ['nazev' => $nazev, 'od' => $od, 'do' => $do_];
-                usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
-                update_option('rs_prazdniny', $prazdniny);
-                $zprava = rs_alert('Prázdniny přidány.');
+                $duplicitni_nazev = false;
+                $prekryv = false;
+                foreach ($prazdniny as $p) {
+                    if (strcasecmp($p['nazev'], $nazev) === 0) $duplicitni_nazev = true;
+                    if ($od <= $p['do'] && $do_ >= $p['od']) $prekryv = true;
+                }
+                if ($prekryv) {
+                    $zprava = rs_alert('Termín se překrývá s existujícími prázdninami. Zkontrolujte data.', 'error');
+                } elseif ($duplicitni_nazev) {
+                    $zprava = rs_alert('Prázdniny s názvem „' . esc_html($nazev) . '" již existují. Doplňte rok, např. „' . esc_html($nazev) . ' 2027".', 'error');
+                } else {
+                    $prazdniny[] = ['nazev' => $nazev, 'od' => $od, 'do' => $do_];
+                    usort($prazdniny, fn($a, $b) => strcmp($a['od'], $b['od']));
+                    update_option('rs_prazdniny', $prazdniny);
+                    $zprava = rs_alert('Prázdniny přidány.');
+                }
             }
         } elseif ($action === 'smazat_prazdniny') {
             $idx = (int)($_POST['praz_idx'] ?? -1);
