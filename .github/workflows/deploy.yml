@@ -1,0 +1,14 @@
+name: Deploy – trigger webhook
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zavolej deploy webhook na serveru
+        run: |
+          curl -f "https://skautchlumec.cz/wp-content/plugins/rezervacni-system/deploy-webhook.php?token=${{ secrets.DEPLOY_SECRET }}"
