@@ -830,7 +830,7 @@ function rs_sekce_prazdniny(): string {
     // Státní svátky
     $svatky = get_option('rs_statni_svatky_data', []);
     $mesice_cz = ['1'=>'leden','2'=>'únor','3'=>'březen','4'=>'duben','5'=>'květen','6'=>'červen','7'=>'červenec','8'=>'srpen','9'=>'září','10'=>'říjen','11'=>'listopad','12'=>'prosinec'];
-    echo "<div class='rs-card'><h4 class='rs-card-title'>Státní svátky</h4>";
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Státní svátky kromě Velikonoc</h4>";
     echo "<p style='font-size:13px;color:#777;margin:0 0 12px'>Svátky se opakují každý rok – zadejte jen den a měsíc.</p>";
     echo "<form method='post' class='rs-form-row'>" . wp_nonce_field('rs_prazdniny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_praz_action' value='pridat_svatek'>";
