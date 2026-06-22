@@ -1450,7 +1450,6 @@ function rs_sekce_interni(): string {
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od'></div>";
     echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do'></div>";
-    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet' value='1' min='1' style='width:90px'></div>";
     echo "</div>";
     echo "</div>";
 
@@ -1463,7 +1462,6 @@ function rs_sekce_interni(): string {
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
     echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
-    echo "<div class='rs-form-group'><label>Počet osob</label><input type='number' name='int_pocet_opak' value='1' min='1' style='width:90px'></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Opakovat od *</label><input type='date' name='int_opakovani_od'></div>";
@@ -1483,7 +1481,7 @@ function rs_sekce_interni(): string {
     // Přehled rezervací
     if ($rezervace) {
         echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Osob</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
+        echo "<table class='rs-table'><thead><tr><th>Prostor</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
 
         foreach ($rezervace as $r) {
             $stav    = get_post_meta($r->ID,'rs_stav',true);
@@ -1499,7 +1497,6 @@ function rs_sekce_interni(): string {
             echo "</td>";
             echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
             echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
-            echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
             echo "<td>" . esc_html($rez_user ? $rez_user->display_name : '–') . "</td>";
             echo "<td>" . esc_html($oddil ?: '–') . "</td>";
             echo "<td>" . rs_stav_badge($stav) . "</td>";
@@ -1572,7 +1569,7 @@ function rs_interni_zpracuj(string $action): string {
         if (!$prostor_id) return rs_alert('Vyberte prostor.','error');
 
         if ($mode === 'jednorazova') {
-            $pocet = max(1,(int)($_POST['int_pocet'] ?? 1));
+            $pocet = 0;
             $od  = sanitize_text_field($_POST['int_datum_od'] ?? '');
             $do_ = sanitize_text_field($_POST['int_datum_do'] ?? '');
             if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
@@ -1588,7 +1585,7 @@ function rs_interni_zpracuj(string $action): string {
         }
 
         // Opakující se
-        $pocet        = max(1,(int)($_POST['int_pocet_opak'] ?? 1));
+        $pocet        = 0;
         $den          = (int)($_POST['int_den_tydne'] ?? 1);
         $cas_od       = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
         $cas_do       = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
