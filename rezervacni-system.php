@@ -2219,6 +2219,13 @@ function rs_formular_sc(): string {
 
     echo "<form method='post' id='rs-ext-form'>" . wp_nonce_field('rs_formular','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_formular_odeslat' value='1'>";
+    // Honeypot: boti toto pole vyplní, lidé ne
+    echo "<div style='position:absolute;left:-9999px;height:0;overflow:hidden' aria-hidden='true'><label>Nevyplňujte toto pole<input type='text' name='rs_hp_email' tabindex='-1' autocomplete='off'></label></div>";
+    // Časová kontrola: podepsaný timestamp pro detekci okamžitého odeslání
+    $rs_form_ts = time();
+    $rs_form_sig = hash_hmac('sha256', (string)$rs_form_ts, wp_salt('auth'));
+    echo "<input type='hidden' name='rs_form_ts' value='" . esc_attr($rs_form_ts) . "'>";
+    echo "<input type='hidden' name='rs_form_sig' value='" . esc_attr($rs_form_sig) . "'>";
 
     // Typ rezervujícího
     echo "<div class='rs-card'><h4 class='rs-card-title'>Kdo rezervuje?</h4>";
@@ -2331,6 +2338,16 @@ function rs_formular_sc(): string {
 }
 
 function rs_zpracuj_externi_formular() {
+    // Honeypot: pokud je pole vyplněné, jde o bota
+    if (!empty($_POST['rs_hp_email'])) return rs_alert('Formulář se nepodařilo odeslat.','error');
+    // Časová kontrola: formulář musí být odeslán nejdříve 3 sekundy po načtení
+    $ts  = (int)($_POST['rs_form_ts'] ?? 0);
+    $sig = sanitize_text_field($_POST['rs_form_sig'] ?? '');
+    $expected = hash_hmac('sha256', (string)$ts, wp_salt('auth'));
+    if (!$ts || !hash_equals($expected, $sig) || (time() - $ts) < 3 || (time() - $ts) > 3600) {
+        return rs_alert('Formulář se nepodařilo odeslat. Zkuste stránku obnovit a odeslat znovu.','error');
+    }
+
     $rez_typ    = sanitize_key($_POST['rez_typ'] ?? 'fyzicka');
     $prostor_id = (int)($_POST['ext_prostor_id'] ?? 0);
     $seg_ids    = array_map('intval',(array)($_POST['ext_segmenty'] ?? []));
