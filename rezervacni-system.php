@@ -1744,6 +1744,8 @@ function rs_vytvor_rezervaci_post(int $prostor_id, array $seg_ids, string $od, s
 
 add_shortcode('rs_kalendar','rs_kalendar_sc');
 function rs_kalendar_sc(array $atts): string {
+    $ob_level = ob_get_level();
+    try {
     rs_css();
     $prostory = rs_get_prostory();
     if (empty($prostory)) return '<p>Žádné prostory nejsou zatím k dispozici.</p>';
@@ -1773,14 +1775,14 @@ function rs_kalendar_sc(array $atts): string {
     foreach ($rezervace as $r) {
         $pid      = (int)get_post_meta($r->ID,'rs_prostor_id',true);
         $segs     = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
-        $r_od_ts  = strtotime(get_post_meta($r->ID,'rs_datum_od',true));
-        $r_do_ts  = strtotime(get_post_meta($r->ID,'rs_datum_do',true));
+        $r_od_ts  = (int)(strtotime(get_post_meta($r->ID,'rs_datum_od',true)) ?: 0);
+        $r_do_ts  = (int)(strtotime(get_post_meta($r->ID,'rs_datum_do',true)) ?: 0);
         $typ      = get_post_meta($r->ID,'rs_typ_rezervace',true);
         $target_ids = empty($segs) ? [$pid] : $segs;
 
         $detail = [
-            'od'  => date('H:i', $r_od_ts),
-            'do'  => date('H:i', $r_do_ts),
+            'od'  => $r_od_ts ? date('H:i', $r_od_ts) : '',
+            'do'  => $r_do_ts ? date('H:i', $r_do_ts) : '',
             'typ' => $typ,
         ];
         if ($is_privileged) {
@@ -1826,7 +1828,7 @@ function rs_kalendar_sc(array $atts): string {
     // Rozbalovací menu měsíce + roku
     echo "<form method='get' style='display:flex;gap:6px;align-items:center'>";
     foreach ($_GET as $k => $v)
-        if ($k !== 'rs_rok' && $k !== 'rs_mesic')
+        if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
             echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
     echo "<select name='rs_mesic' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
     for ($m = 1; $m <= 12; $m++) {
@@ -1940,6 +1942,10 @@ function rs_kalendar_sc(array $atts): string {
     <?php
     echo "</div>"; // .rs-wrap
     return ob_get_clean();
+    } catch (\Throwable $e) {
+        while (ob_get_level() > $ob_level) ob_end_clean();
+        return '<div class="rs-wrap"><p style="background:#f8d7da;padding:12px;border-radius:4px;color:#721c24"><strong>Chyba v kalendáři:</strong> ' . esc_html($e->getMessage()) . ' (' . esc_html(basename($e->getFile())) . ':' . $e->getLine() . ')</p></div>';
+    }
 }
 
 // ═══ FRONTEND: REZERVAČNÍ FORMULÁŘ [rs_formular] ═════════════════════════════
