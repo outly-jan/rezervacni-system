@@ -217,22 +217,68 @@ function rs_sprava_url(string $token): string {
     return add_query_arg('rs_sprava', $token, rtrim($base, '/') . '/');
 }
 
+function rs_admin_url(): string {
+    global $wpdb;
+    $row = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_admin]%' LIMIT 1");
+    return $row ? (string)get_permalink((int)$row->ID) : home_url('/');
+}
+
+function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $nova_id = 0): string {
+    $ts_od     = strtotime($od_raw);
+    $ts_do     = strtotime($do_raw);
+    $win_od    = date('Y-m-d H:i:s', $ts_od - 3 * 86400);
+    $win_do    = date('Y-m-d H:i:s', $ts_do + 3 * 86400);
+    $stav_map  = ['cekajici' => 'čeká na schválení', 'potvrzena' => 'potvrzena', 'zrusena' => 'zrušena'];
+
+    $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => 'rs_prostor_id', 'value' => $prostor_id]]]);
+
+    $rows = [];
+    foreach ($all as $rid) {
+        $r_od = get_post_meta($rid, 'rs_datum_od', true);
+        $r_do = get_post_meta($rid, 'rs_datum_do', true);
+        if (strtotime($r_do) <= strtotime($win_od) || strtotime($r_od) >= strtotime($win_do)) continue;
+        $rows[$rid] = strtotime($r_od);
+    }
+    if (empty($rows)) return '';
+
+    asort($rows);
+    $lines = ['Obsazenost prostory v okolí termínu (±3 dny):'];
+    foreach (array_keys($rows) as $rid) {
+        $r_od  = get_post_meta($rid, 'rs_datum_od', true);
+        $r_do  = get_post_meta($rid, 'rs_datum_do', true);
+        $stav  = $stav_map[get_post_meta($rid, 'rs_stav', true)] ?? '?';
+        $jmeno = rs_rez_jmeno($rid);
+        $mark  = ($rid === $nova_id) ? ' <<< TATO ŽÁDOST' : '';
+        $lines[] = '  ' . rs_format_datum($r_od) . ' – ' . rs_format_datum($r_do)
+                 . '  ' . $jmeno . '  [' . $stav . ']' . $mark;
+    }
+    return implode("\n", $lines);
+}
+
 define('RS_PODPIS', "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černého havrana");
 
 function rs_notifikuj_nova(int $id) {
-    $email   = get_post_meta($id, 'rs_email', true);
-    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
-    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
-    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
-    $token   = get_post_meta($id, 'rs_token', true);
-    $url     = rs_sprava_url($token);
+    $email      = get_post_meta($id, 'rs_email', true);
+    $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $prostor    = html_entity_decode(get_the_title($prostor_id), ENT_QUOTES | ENT_HTML5);
+    $od_raw     = get_post_meta($id, 'rs_datum_od', true);
+    $do_raw     = get_post_meta($id, 'rs_datum_do', true);
+    $od         = rs_format_datum($od_raw);
+    $do_        = rs_format_datum($do_raw);
+    $token      = get_post_meta($id, 'rs_token', true);
+    $url        = rs_sprava_url($token);
 
     if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$prostor}",
         "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$prostor} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . RS_PODPIS);
 
+    $prehled = rs_rez_prehled($prostor_id, $od_raw, $do_raw, $id);
     foreach (rs_spravci_emaily() as $se)
         rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
-            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nTermín: {$od} – {$do_}\n\n--- Žadatel ---\n" . rs_rez_udaje($id) . "\n\nZpracujte ji v administraci rezervačního systému.",
+            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nTermín: {$od} – {$do_}\n\n"
+            . ($prehled ? $prehled . "\n\n" : '')
+            . "--- Žadatel ---\n" . rs_rez_udaje($id)
+            . "\n\nAdministrace: " . rs_admin_url(),
             $email);
 }
 
