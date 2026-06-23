@@ -1877,31 +1877,7 @@ function rs_kalendar_sc(array $atts): string {
 
     ob_start();
     echo "<div class='rs-wrap'>";
-    echo "<h3 style='margin-bottom:16px'>Obsazenost prostorů</h3>";
-
-    // Navigace
-    echo "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px'>";
-    echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
-    // Rozbalovací menu měsíce + roku
-    echo "<form method='get' style='display:flex;gap:6px;align-items:center'>";
-    foreach ($_GET as $k => $v)
-        if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
-            echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
-    echo "<select name='rs_mesic' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
-    for ($m = 1; $m <= 12; $m++) {
-        $sel = ($m === $mesic) ? ' selected' : '';
-        echo "<option value='{$m}'{$sel}>" . $mesice_cz[$m] . "</option>";
-    }
-    echo "</select>";
-    echo "<select name='rs_rok' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
-    for ($y = (int)date('Y') - 2; $y <= (int)date('Y') + 5; $y++) {
-        $sel = ($y === $rok) ? ' selected' : '';
-        echo "<option value='{$y}'{$sel}>{$y}</option>";
-    }
-    echo "</select>";
-    echo "</form>";
-    echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
-    echo "</div>";
+    echo "<h3 style='margin-bottom:20px'>Obsazenost prostorů</h3>";
 
     // URL stránky s rezervačním formulářem: option → auto-detekce → prázdné
     $form_url = get_option('rs_formular_url', '');
@@ -1957,6 +1933,28 @@ function rs_kalendar_sc(array $atts): string {
             echo "</div>";
         }
 
+        // Navigace
+        echo "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px'>";
+        echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
+        echo "<form method='get' style='display:flex;gap:6px;align-items:center'>";
+        foreach ($_GET as $k => $v)
+            if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
+                echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
+        echo "<select name='rs_mesic' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        for ($m = 1; $m <= 12; $m++) {
+            $sel = ($m === $mesic) ? ' selected' : '';
+            echo "<option value='{$m}'{$sel}>" . $mesice_cz[$m] . "</option>";
+        }
+        echo "</select>";
+        echo "<select name='rs_rok' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        for ($y = (int)date('Y') - 2; $y <= (int)date('Y') + 5; $y++) {
+            $sel = ($y === $rok) ? ' selected' : '';
+            echo "<option value='{$y}'{$sel}>{$y}</option>";
+        }
+        echo "</select>";
+        echo "</form>";
+        echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
+        echo "</div>";
         echo "<p style='font-weight:600;color:#1a5c2a;margin:0 0 6px'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</p>";
         echo "<div data-rs-scroll-wrap style='position:relative'>";
         echo "<div class='rs-kal-scroll' style='overflow-x:auto'>";
