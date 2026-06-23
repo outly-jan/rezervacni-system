@@ -1942,7 +1942,8 @@ function rs_kalendar_sc(array $atts): string {
         }
 
         echo "<p style='font-weight:600;color:#1a5c2a;margin:0 0 6px'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</p>";
-        echo "<div style='overflow-x:auto'>";
+        echo "<div data-rs-scroll-wrap style='position:relative'>";
+        echo "<div class='rs-kal-scroll' style='overflow-x:auto'>";
         echo "<table class='rs-kal-table'><thead><tr><th>Prostor/Segment</th>";
         for ($d = 1; $d <= $days_in_month; $d++) {
             $dow   = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
@@ -1968,7 +1969,11 @@ function rs_kalendar_sc(array $atts): string {
             }
             echo "</tr>";
         }
-        echo "</tbody></table></div>";
+        echo "</tbody></table></div>"; // .rs-kal-scroll
+        $arr_btn = "background:rgba(255,255,255,.95);border:1px solid #ccc;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;color:#1a5c2a;pointer-events:all;flex-shrink:0;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.15)";
+        echo "<div class='rs-kal-ind rs-kal-ind-r' style='position:absolute;top:0;right:0;bottom:0;width:72px;background:linear-gradient(to right,transparent,rgba(255,255,255,.85));pointer-events:none;display:flex;align-items:center;justify-content:flex-end;padding-right:8px'><button onclick='rsKalScrollDir(this,1)' style='{$arr_btn}'>&#8250;</button></div>";
+        echo "<div class='rs-kal-ind rs-kal-ind-l' style='position:absolute;top:0;left:0;bottom:0;width:72px;background:linear-gradient(to left,transparent,rgba(255,255,255,.85));pointer-events:none;display:none;align-items:center;justify-content:flex-start;padding-left:8px'><button onclick='rsKalScrollDir(this,-1)' style='{$arr_btn}'>&#8249;</button></div>";
+        echo "</div>"; // [data-rs-scroll-wrap]
         echo "<div style='margin:6px 0 10px;font-size:12px;color:#666;display:flex;gap:8px 18px;flex-wrap:wrap'>";
         echo "<span><span class='rs-kal-free' style='font-size:11px;width:18px;height:18px;line-height:18px'>✓</span> Volno</span>";
         echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
@@ -2095,6 +2100,28 @@ function rs_kalendar_sc(array $atts): string {
         modal.style.display = 'flex';
         modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
     }
+    function rsKalScrollDir(btn, dir) {
+        var wrap = btn.closest('[data-rs-scroll-wrap]');
+        if (!wrap) return;
+        wrap.querySelector('.rs-kal-scroll').scrollBy({ left: dir * 150, behavior: 'smooth' });
+    }
+    function rsKalScrollUpdate(wrap) {
+        var scr = wrap.querySelector('.rs-kal-scroll');
+        var indR = wrap.querySelector('.rs-kal-ind-r');
+        var indL = wrap.querySelector('.rs-kal-ind-l');
+        var overflows = scr.scrollWidth > scr.clientWidth + 2;
+        indR.style.display = (overflows && scr.scrollLeft + scr.clientWidth < scr.scrollWidth - 2) ? 'flex' : 'none';
+        indL.style.display = scr.scrollLeft > 2 ? 'flex' : 'none';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-rs-scroll-wrap]').forEach(function(wrap) {
+            wrap.querySelector('.rs-kal-scroll').addEventListener('scroll', function() { rsKalScrollUpdate(wrap); });
+            rsKalScrollUpdate(wrap);
+        });
+        window.addEventListener('resize', function() {
+            document.querySelectorAll('[data-rs-scroll-wrap]').forEach(rsKalScrollUpdate);
+        });
+    });
     var rsLbGallery = [], rsLbIdx = 0;
     function rsLightbox(el) {
         var gallery = el.getAttribute('data-gallery');
