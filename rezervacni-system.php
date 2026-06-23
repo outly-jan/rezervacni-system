@@ -490,6 +490,13 @@ function rs_sekce_prostory(): string {
 
         echo "<div class='rs-form-group'><label>Popis</label><textarea name='prostor_popis' rows='3'>" . esc_textarea($edit ? $edit->post_content : '') . "</textarea></div>";
 
+        $adr = esc_attr($edit ? get_post_meta($edit->ID,'rs_adresa',true) : '');
+        $gps = esc_attr($edit ? get_post_meta($edit->ID,'rs_gps',true) : '');
+        echo "<div class='rs-form-row'>";
+        echo "<div class='rs-form-group'><label>Adresa</label><input type='text' name='prostor_adresa' value='{$adr}' placeholder='Např. Husova 123, Chlumec nad Cidlinou'></div>";
+        echo "<div class='rs-form-group'><label>GPS souřadnice</label><input type='text' name='prostor_gps' value='{$gps}' placeholder='50.1234567, 15.7654321' style='max-width:220px'></div>";
+        echo "</div>";
+
         $ma_seg_checked = $ma_seg ? 'checked' : '';
         echo "<div class='rs-form-group'><label><input type='checkbox' name='prostor_ma_segmenty' {$ma_seg_checked} onchange='rsToggleSegmenty(this)'> Prostor má segmenty (místnosti)</label></div>";
 
@@ -644,6 +651,8 @@ function rs_prostor_zpracuj(string $action): string {
             $id = wp_insert_post(['post_type'=>'rs_prostor','post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['prostor_popis']??''),'post_status'=>'publish']);
             update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
             update_post_meta($id,'rs_ma_segmenty',$ma_seg);
+            update_post_meta($id,'rs_adresa', sanitize_text_field($_POST['prostor_adresa']??''));
+            update_post_meta($id,'rs_gps',    sanitize_text_field($_POST['prostor_gps']??''));
             if ($ma_seg === '0') {
                 update_post_meta($id,'rs_rozloha',  (int)($_POST['prostor_rozloha']??0));
                 update_post_meta($id,'rs_kapacita', (int)($_POST['prostor_kapacita']??0));
@@ -660,6 +669,8 @@ function rs_prostor_zpracuj(string $action): string {
             update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
             $ma_seg = isset($_POST['prostor_ma_segmenty']) ? '1' : '0';
             update_post_meta($id,'rs_ma_segmenty',$ma_seg);
+            update_post_meta($id,'rs_adresa', sanitize_text_field($_POST['prostor_adresa']??''));
+            update_post_meta($id,'rs_gps',    sanitize_text_field($_POST['prostor_gps']??''));
             if ($ma_seg === '0') {
                 update_post_meta($id,'rs_rozloha',  (int)($_POST['prostor_rozloha']??0));
                 update_post_meta($id,'rs_kapacita', (int)($_POST['prostor_kapacita']??0));
@@ -1850,6 +1861,47 @@ function rs_kalendar_sc(array $atts): string {
         echo "<div style='margin-bottom:28px'>";
         echo "<h4 style='color:#1a5c2a;margin-bottom:8px'>" . esc_html($p->post_title) . "</h4>";
         $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
+
+        // Info blok pod názvem prostoru
+        $p_popis  = trim($p->post_content);
+        $p_adresa = get_post_meta($p->ID,'rs_adresa',true);
+        $p_gps    = get_post_meta($p->ID,'rs_gps',true);
+        $p_kap    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $items));
+        $p_roz    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_rozloha',true), $items));
+        $p_dop    = get_post_meta($p->ID,'rs_doplnujici',true);
+        $p_rezim  = get_post_meta($p->ID,'rs_ceny_rezim',true) ?: 'celek';
+        $fmt      = fn(float $v): string => number_format($v, 0, ',', "\xc2\xa0");
+        if (!rs_ma_segmenty($p->ID) || $p_rezim === 'celek') {
+            $za_os    = (float)get_post_meta($p->ID,'rs_cena_za_osobu',true);
+            $za_min   = (float)get_post_meta($p->ID,'rs_cena_min',true);
+            if ($za_os > 0 && $za_min > 0)  $p_cena = $fmt($za_os) . '&nbsp;Kč/os., min. ' . $fmt($za_min) . '&nbsp;Kč';
+            elseif ($za_os > 0)              $p_cena = $fmt($za_os) . '&nbsp;Kč/os.';
+            elseif ($za_min > 0)             $p_cena = 'Paušálně ' . $fmt($za_min) . '&nbsp;Kč';
+            else                             $p_cena = '';
+        } else {
+            $mins = array_filter(array_map(fn($s) => (float)get_post_meta($s->ID,'rs_cena_min',true), $items));
+            $p_cena = $mins ? 'od ' . $fmt((float)min($mins)) . '&nbsp;Kč/segment' : '';
+        }
+        if ($p_popis || $p_adresa || $p_gps || $p_kap || $p_roz || $p_cena || $p_dop) {
+            echo "<div style='margin-bottom:12px;font-size:13px;color:#444;background:#f8faf8;border:1px solid #d4e8d7;border-radius:4px;padding:12px 14px'>";
+            if ($p_popis) echo "<p style='margin:0 0 8px'>" . nl2br(esc_html($p_popis)) . "</p>";
+            $chips = [];
+            if ($p_adresa) $chips[] = "📍 " . esc_html($p_adresa);
+            if ($p_gps) {
+                $gps_url = 'https://maps.google.com/?q=' . rawurlencode($p_gps);
+                $chips[] = "🗺️ <a href='" . esc_url($gps_url) . "' target='_blank' rel='noopener' style='color:#1a5c2a'>" . esc_html($p_gps) . "</a>";
+            }
+            if ($p_kap) $chips[] = "🛏 <strong>" . $p_kap . "&nbsp;míst</strong> na spaní <span style='color:#888'>(přibližný počet)</span>";
+            if ($p_roz) $chips[] = "📐 <strong>" . $p_roz . "&nbsp;m²</strong> <span style='color:#888'>(místnosti ke spaní, bez společných prostor)</span>";
+            if ($p_cena) $chips[] = "💰 " . $p_cena;
+            if ($chips) {
+                echo "<div style='display:flex;flex-wrap:wrap;gap:4px 20px'>";
+                foreach ($chips as $chip) echo "<span>" . $chip . "</span>";
+                echo "</div>";
+            }
+            if ($p_dop) echo "<div style='margin-top:8px;color:#555'>" . nl2br(esc_html($p_dop)) . "</div>";
+            echo "</div>";
+        }
 
         echo "<div style='overflow-x:auto'>";
         echo "<table class='rs-kal-table'><thead><tr><th>Prostor/Segment</th>";
