@@ -195,13 +195,20 @@ function rs_rez_udaje(int $id): string {
     $typ      = get_post_meta($id, 'rs_rez_typ', true);
     $pocet    = (int)get_post_meta($id, 'rs_pocet_lidi', true);
     $poznamka = get_post_meta($id, 'rs_poznamka', true);
+    $tel_predv = get_post_meta($id, 'rs_tel_predvolba', true);
+    $tel_mobil = get_post_meta($id, 'rs_mobil', true);
+    $tel_fmt   = $tel_mobil ? ($tel_predv ? "+$tel_predv $tel_mobil" : $tel_mobil) : '';
+    $ulice_v   = get_post_meta($id, 'rs_ulice', true);
+    $adresa    = $ulice_v
+        ? trim($ulice_v . ' ' . get_post_meta($id,'rs_cp',true) . ', ' . get_post_meta($id,'rs_psc',true) . ' ' . get_post_meta($id,'rs_obec',true))
+        : get_post_meta($id, 'rs_bydliste', true);
     if ($typ === 'pravnicka') {
         $lines = [
             'Organizace:        ' . get_post_meta($id, 'rs_nazev', true),
             'IČO:               ' . get_post_meta($id, 'rs_ico', true),
             'Sídlo:             ' . get_post_meta($id, 'rs_sidlo', true),
             'Kontaktní osoba:   ' . get_post_meta($id, 'rs_kontakt_jmeno', true),
-            'Mobil:             ' . get_post_meta($id, 'rs_mobil', true),
+            'Mobil:             ' . $tel_fmt,
             'E-mail:            ' . get_post_meta($id, 'rs_email', true),
             'Počet osob:        ' . $pocet,
         ];
@@ -210,8 +217,8 @@ function rs_rez_udaje(int $id): string {
         $lines = [
             'Jméno:             ' . trim(get_post_meta($id, 'rs_jmeno', true) . ' ' . get_post_meta($id, 'rs_prijmeni', true)),
             'Datum narození:    ' . ($nar ? rs_format_datum($nar . ' 00:00:00') : ''),
-            'Bydliště:          ' . get_post_meta($id, 'rs_bydliste', true),
-            'Mobil:             ' . get_post_meta($id, 'rs_mobil', true),
+            'Bydliště:          ' . $adresa,
+            'Mobil:             ' . $tel_fmt,
             'E-mail:            ' . get_post_meta($id, 'rs_email', true),
             'Počet osob:        ' . $pocet,
         ];
@@ -1522,13 +1529,17 @@ function rs_rez_detail_admin(int $id): string {
         echo "<tr><th>IČO</th><td>" . esc_html(get_post_meta($id,'rs_ico',true)) . "</td></tr>";
         echo "<tr><th>Sídlo</th><td>" . esc_html(get_post_meta($id,'rs_sidlo',true)) . "</td></tr>";
         echo "<tr><th>Kontakt</th><td>" . esc_html(get_post_meta($id,'rs_kontakt_jmeno',true)) . "</td></tr>";
-        echo "<tr><th>Mobil</th><td>" . esc_html(get_post_meta($id,'rs_mobil',true)) . "</td></tr>";
+        $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true); $a_tel_m = get_post_meta($id,'rs_mobil',true);
+        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
         echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
     } else {
         echo "<tr><th>Jméno</th><td>" . esc_html(get_post_meta($id,'rs_jmeno',true)) . " " . esc_html(get_post_meta($id,'rs_prijmeni',true)) . "</td></tr>";
         echo "<tr><th>Datum nar.</th><td>" . esc_html(get_post_meta($id,'rs_datum_narozeni',true)) . "</td></tr>";
-        echo "<tr><th>Bydliště</th><td>" . esc_html(get_post_meta($id,'rs_bydliste',true)) . "</td></tr>";
-        echo "<tr><th>Mobil</th><td>" . esc_html(get_post_meta($id,'rs_mobil',true)) . "</td></tr>";
+        $a_ulice = get_post_meta($id,'rs_ulice',true);
+        $a_adr   = $a_ulice ? trim($a_ulice.' '.get_post_meta($id,'rs_cp',true).', '.get_post_meta($id,'rs_psc',true).' '.get_post_meta($id,'rs_obec',true)) : get_post_meta($id,'rs_bydliste',true);
+        $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true); $a_tel_m = get_post_meta($id,'rs_mobil',true);
+        echo "<tr><th>Bydliště</th><td>" . esc_html($a_adr) . "</td></tr>";
+        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
         echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
     }
     echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
@@ -2463,15 +2474,27 @@ function rs_formular_sc(): string {
     // Fyzická osoba
     echo "<div id='rs-ext-fyzicka'" . ($old_typ === 'pravnicka' ? " style='display:none'" : '') . ">";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno'" . $ov('fyzicka_jmeno') . " required data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni'" . $ov('fyzicka_prijmeni') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno'" . $ov('fyzicka_jmeno') . " required minlength='2' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni'" . $ov('fyzicka_prijmeni') . " required minlength='2' data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar'" . $ov('fyzicka_datum_nar') . " required data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste'" . $ov('fyzicka_bydliste') . " required data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil'" . $ov('fyzicka_mobil') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group' style='flex:3'><label>Ulice *</label><input type='text' name='fyzicka_ulice'" . $ov('fyzicka_ulice') . " required data-rs-cond placeholder='Náměstí míru'></div>";
+    echo "<div class='rs-form-group' style='flex:1'><label>Č. popisné *</label><input type='text' name='fyzicka_cp'" . $ov('fyzicka_cp') . " required data-rs-cond placeholder='12'></div>";
+    echo "</div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group' style='flex:1'><label>PSČ *</label><input type='text' name='fyzicka_psc'" . $ov('fyzicka_psc') . " required minlength='3' data-rs-cond placeholder='503 51'></div>";
+    echo "<div class='rs-form-group' style='flex:3'><label>Obec *</label><input type='text' name='fyzicka_obec'" . $ov('fyzicka_obec') . " required data-rs-cond placeholder='Hradec Králové'></div>";
+    echo "</div>";
+    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group'>";
+    echo "<label>Mobil * <span style='font-weight:normal;font-size:12px;color:#666'>(9 číslic bez předvolby)</span></label>";
+    echo "<div style='display:flex;align-items:center;gap:4px'>";
+    echo "<div style='display:flex;align-items:center;border:1px solid #ccc;border-radius:3px;padding:0 4px 0 8px;background:#f5f5f5'><span style='color:#555;font-size:13px'>+</span><input type='text' name='fyzicka_predvolba'" . $ov('fyzicka_predvolba','420') . " pattern='[0-9]{1,4}' maxlength='4' style='border:none;outline:none;background:transparent;width:38px;padding:7px 2px;font-size:14px' required data-rs-cond title='Mezinárodní předvolba (např. 420 pro ČR)'></div>";
+    echo "<input type='tel' name='fyzicka_mobil'" . $ov('fyzicka_mobil') . " pattern='[0-9]{9}' maxlength='9' minlength='9' placeholder='123456789' required data-rs-cond style='flex:1' title='9 číslic bez předvolby'>";
+    echo "</div></div>";
     echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email'" . $ov('fyzicka_email') . " required data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // fyzicka
@@ -2484,8 +2507,13 @@ function rs_formular_sc(): string {
     echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev'" . $ov('pravnicka_nazev') . " data-rs-cond></div>";
     echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo'" . $ov('pravnicka_sidlo') . " data-rs-cond></div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt'" . $ov('pravnicka_kontakt') . " data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil'" . $ov('pravnicka_mobil') . " data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt'" . $ov('pravnicka_kontakt') . " minlength='2' data-rs-cond></div>";
+    echo "<div class='rs-form-group'>";
+    echo "<label>Mobil * <span style='font-weight:normal;font-size:12px;color:#666'>(9 číslic bez předvolby)</span></label>";
+    echo "<div style='display:flex;align-items:center;gap:4px'>";
+    echo "<div style='display:flex;align-items:center;border:1px solid #ccc;border-radius:3px;padding:0 4px 0 8px;background:#f5f5f5'><span style='color:#555;font-size:13px'>+</span><input type='text' name='pravnicka_predvolba'" . $ov('pravnicka_predvolba','420') . " pattern='[0-9]{1,4}' maxlength='4' style='border:none;outline:none;background:transparent;width:38px;padding:7px 2px;font-size:14px' data-rs-cond title='Mezinárodní předvolba'></div>";
+    echo "<input type='tel' name='pravnicka_mobil'" . $ov('pravnicka_mobil') . " pattern='[0-9]{9}' maxlength='9' minlength='9' placeholder='123456789' data-rs-cond style='flex:1' title='9 číslic bez předvolby'>";
+    echo "</div></div>";
     echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email'" . $ov('pravnicka_email') . " data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // pravnicka
@@ -2676,6 +2704,41 @@ function rs_zpracuj_externi_formular() {
     }
     if (!$prostor_id || !$datum_od || !$datum_do) return rs_alert('Vyplňte prosím všechna povinná pole.','error');
     if (strtotime($datum_od) >= strtotime($datum_do)) return rs_alert('Datum konce musí být po datu začátku.','error');
+
+    // Kontaktní validace před vytvořením rezervace
+    if ($rez_typ === 'fyzicka') {
+        $f_jmeno    = sanitize_text_field($_POST['fyzicka_jmeno']??'');
+        $f_prijmeni = sanitize_text_field($_POST['fyzicka_prijmeni']??'');
+        $f_datum_nar = sanitize_text_field($_POST['fyzicka_datum_nar']??'');
+        $f_ulice    = sanitize_text_field($_POST['fyzicka_ulice']??'');
+        $f_cp       = sanitize_text_field($_POST['fyzicka_cp']??'');
+        $f_psc      = sanitize_text_field($_POST['fyzicka_psc']??'');
+        $f_obec     = sanitize_text_field($_POST['fyzicka_obec']??'');
+        $f_predv    = preg_replace('/[^0-9]/', '', $_POST['fyzicka_predvolba']??'420') ?: '420';
+        $f_mobil    = preg_replace('/\s+/', '', sanitize_text_field($_POST['fyzicka_mobil']??''));
+        $f_email    = sanitize_email($_POST['fyzicka_email']??'');
+        if (mb_strlen($f_jmeno) < 2 || mb_strlen($f_prijmeni) < 2)
+            return rs_alert('Jméno a příjmení musí mít každé aspoň 2 znaky.','error');
+        if (!$f_ulice || !$f_cp || !$f_psc || !$f_obec)
+            return rs_alert('Vyplňte prosím všechna adresní pole (ulice, č. popisné, PSČ, obec).','error');
+        if (!preg_match('/^[0-9]{9}$/', $f_mobil))
+            return rs_alert('Telefonní číslo musí mít přesně 9 číslic (bez předvolby).','error');
+        if (!is_email($f_email))
+            return rs_alert('Zadejte platnou e-mailovou adresu.','error');
+    } else {
+        $p_nazev    = sanitize_text_field($_POST['pravnicka_nazev']??'');
+        $p_ico      = sanitize_text_field($_POST['pravnicka_ico']??'');
+        $p_sidlo    = sanitize_text_field($_POST['pravnicka_sidlo']??'');
+        $p_kontakt  = sanitize_text_field($_POST['pravnicka_kontakt']??'');
+        $p_predv    = preg_replace('/[^0-9]/', '', $_POST['pravnicka_predvolba']??'420') ?: '420';
+        $p_mobil    = preg_replace('/\s+/', '', sanitize_text_field($_POST['pravnicka_mobil']??''));
+        $p_email    = sanitize_email($_POST['pravnicka_email']??'');
+        if (!preg_match('/^[0-9]{9}$/', $p_mobil))
+            return rs_alert('Telefonní číslo musí mít přesně 9 číslic (bez předvolby).','error');
+        if (!is_email($p_email))
+            return rs_alert('Zadejte platnou e-mailovou adresu.','error');
+    }
+
     if (!rs_je_volno($prostor_id,$seg_ids,$datum_od,$datum_do)) return rs_alert('Zvolený termín bohužel není volný. Vyberte prosím jiný termín.','error');
 
     $token = rs_token();
@@ -2684,19 +2747,24 @@ function rs_zpracuj_externi_formular() {
 
     update_post_meta($rid,'rs_rez_typ',$rez_typ);
     if ($rez_typ === 'fyzicka') {
-        update_post_meta($rid,'rs_jmeno',          sanitize_text_field($_POST['fyzicka_jmeno']??''));
-        update_post_meta($rid,'rs_prijmeni',        sanitize_text_field($_POST['fyzicka_prijmeni']??''));
-        update_post_meta($rid,'rs_datum_narozeni',  sanitize_text_field($_POST['fyzicka_datum_nar']??''));
-        update_post_meta($rid,'rs_bydliste',        sanitize_text_field($_POST['fyzicka_bydliste']??''));
-        update_post_meta($rid,'rs_mobil',           sanitize_text_field($_POST['fyzicka_mobil']??''));
-        update_post_meta($rid,'rs_email',           sanitize_email($_POST['fyzicka_email']??''));
+        update_post_meta($rid,'rs_jmeno',          $f_jmeno);
+        update_post_meta($rid,'rs_prijmeni',        $f_prijmeni);
+        update_post_meta($rid,'rs_datum_narozeni',  $f_datum_nar);
+        update_post_meta($rid,'rs_ulice',           $f_ulice);
+        update_post_meta($rid,'rs_cp',              $f_cp);
+        update_post_meta($rid,'rs_psc',             $f_psc);
+        update_post_meta($rid,'rs_obec',            $f_obec);
+        update_post_meta($rid,'rs_tel_predvolba',   $f_predv);
+        update_post_meta($rid,'rs_mobil',           $f_mobil);
+        update_post_meta($rid,'rs_email',           $f_email);
     } else {
-        update_post_meta($rid,'rs_nazev',           sanitize_text_field($_POST['pravnicka_nazev']??''));
-        update_post_meta($rid,'rs_ico',             sanitize_text_field($_POST['pravnicka_ico']??''));
-        update_post_meta($rid,'rs_sidlo',           sanitize_text_field($_POST['pravnicka_sidlo']??''));
-        update_post_meta($rid,'rs_kontakt_jmeno',   sanitize_text_field($_POST['pravnicka_kontakt']??''));
-        update_post_meta($rid,'rs_mobil',           sanitize_text_field($_POST['pravnicka_mobil']??''));
-        update_post_meta($rid,'rs_email',           sanitize_email($_POST['pravnicka_email']??''));
+        update_post_meta($rid,'rs_nazev',           $p_nazev);
+        update_post_meta($rid,'rs_ico',             $p_ico);
+        update_post_meta($rid,'rs_sidlo',           $p_sidlo);
+        update_post_meta($rid,'rs_kontakt_jmeno',   $p_kontakt);
+        update_post_meta($rid,'rs_tel_predvolba',   $p_predv);
+        update_post_meta($rid,'rs_mobil',           $p_mobil);
+        update_post_meta($rid,'rs_email',           $p_email);
     }
     rs_notifikuj_nova($rid);
     return true;
@@ -2729,7 +2797,10 @@ function rs_render_sprava_rezervace(): string {
             } elseif ($action === 'upravit_kontakt' && $stav !== 'zrusena') {
                 $r_typ = get_post_meta($rid,'rs_rez_typ',true);
                 update_post_meta($rid,'rs_pocet_lidi',(int)($_POST['pocet_lidi'] ?? 1));
-                update_post_meta($rid,'rs_mobil',sanitize_text_field($_POST['mobil'] ?? ''));
+                $up_predv = preg_replace('/[^0-9]/', '', $_POST['predvolba'] ?? '420') ?: '420';
+                $up_mobil = preg_replace('/\s+/', '', sanitize_text_field($_POST['mobil'] ?? ''));
+                update_post_meta($rid,'rs_tel_predvolba', $up_predv);
+                update_post_meta($rid,'rs_mobil', $up_mobil);
                 update_post_meta($rid,'rs_email',sanitize_email($_POST['email'] ?? ''));
                 if ($r_typ === 'pravnicka') {
                     update_post_meta($rid,'rs_kontakt_jmeno',sanitize_text_field($_POST['kontakt_jmeno'] ?? ''));
@@ -2737,7 +2808,10 @@ function rs_render_sprava_rezervace(): string {
                     update_post_meta($rid,'rs_jmeno',sanitize_text_field($_POST['jmeno'] ?? ''));
                     update_post_meta($rid,'rs_prijmeni',sanitize_text_field($_POST['prijmeni'] ?? ''));
                     update_post_meta($rid,'rs_datum_narozeni',sanitize_text_field($_POST['datum_narozeni'] ?? ''));
-                    update_post_meta($rid,'rs_bydliste',sanitize_text_field($_POST['bydliste'] ?? ''));
+                    update_post_meta($rid,'rs_ulice',sanitize_text_field($_POST['ulice'] ?? ''));
+                    update_post_meta($rid,'rs_cp',sanitize_text_field($_POST['cp'] ?? ''));
+                    update_post_meta($rid,'rs_psc',sanitize_text_field($_POST['psc'] ?? ''));
+                    update_post_meta($rid,'rs_obec',sanitize_text_field($_POST['obec'] ?? ''));
                 }
                 $zprava = rs_alert('Údaje byly uloženy.');
             } elseif ($action === 'ulozit_ucastniky') {
@@ -2790,16 +2864,36 @@ function rs_render_sprava_rezervace(): string {
         echo "<form method='post'>" . wp_nonce_field('rs_sprava_' . $token,'_wpnonce',true,false);
         echo "<input type='hidden' name='rs_sprava_action' value='upravit_kontakt'>";
         echo "<div class='rs-form-row'>";
+        $sp_predv = esc_attr(get_post_meta($rid,'rs_tel_predvolba',true) ?: '420');
+        $sp_mobil = esc_attr(get_post_meta($rid,'rs_mobil',true));
+        $sp_email = esc_attr(get_post_meta($rid,'rs_email',true));
         if ($r_typ === 'pravnicka') {
-            echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='kontakt_jmeno' value='" . esc_attr(get_post_meta($rid,'rs_kontakt_jmeno',true)) . "' required></div>";
+            echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='kontakt_jmeno' value='" . esc_attr(get_post_meta($rid,'rs_kontakt_jmeno',true)) . "' required minlength='2'></div>";
         } else {
-            echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='jmeno' value='" . esc_attr(get_post_meta($rid,'rs_jmeno',true)) . "' required></div>";
-            echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='prijmeni' value='" . esc_attr(get_post_meta($rid,'rs_prijmeni',true)) . "' required></div>";
+            echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='jmeno' value='" . esc_attr(get_post_meta($rid,'rs_jmeno',true)) . "' required minlength='2'></div>";
+            echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='prijmeni' value='" . esc_attr(get_post_meta($rid,'rs_prijmeni',true)) . "' required minlength='2'></div>";
             echo "<div class='rs-form-group'><label>Datum narození</label><input type='date' name='datum_narozeni' value='" . esc_attr(get_post_meta($rid,'rs_datum_narozeni',true)) . "'></div>";
-            echo "<div class='rs-form-group'><label>Bydliště</label><input type='text' name='bydliste' value='" . esc_attr(get_post_meta($rid,'rs_bydliste',true)) . "'></div>";
+            $sp_ulice = esc_attr(get_post_meta($rid,'rs_ulice',true));
+            $sp_cp    = esc_attr(get_post_meta($rid,'rs_cp',true));
+            $sp_psc   = esc_attr(get_post_meta($rid,'rs_psc',true));
+            $sp_obec  = esc_attr(get_post_meta($rid,'rs_obec',true));
+            $sp_old_b = get_post_meta($rid,'rs_bydliste',true);
+            if (!$sp_ulice && $sp_old_b) echo "<p style='font-size:12px;color:#888;margin:0 0 6px'>Původní adresa: <em>" . esc_html($sp_old_b) . "</em></p>";
+            echo "<div class='rs-form-row'>";
+            echo "<div class='rs-form-group' style='flex:3'><label>Ulice</label><input type='text' name='ulice' value='{$sp_ulice}'></div>";
+            echo "<div class='rs-form-group' style='flex:1'><label>Č. popisné</label><input type='text' name='cp' value='{$sp_cp}'></div>";
+            echo "</div><div class='rs-form-row'>";
+            echo "<div class='rs-form-group' style='flex:1'><label>PSČ</label><input type='text' name='psc' value='{$sp_psc}'></div>";
+            echo "<div class='rs-form-group' style='flex:3'><label>Obec</label><input type='text' name='obec' value='{$sp_obec}'></div>";
+            echo "</div>";
         }
-        echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='mobil' value='" . esc_attr(get_post_meta($rid,'rs_mobil',true)) . "' required></div>";
-        echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='email' value='" . esc_attr(get_post_meta($rid,'rs_email',true)) . "' required></div>";
+        echo "<div class='rs-form-group'>";
+        echo "<label>Mobil * <span style='font-weight:normal;font-size:12px;color:#666'>(9 číslic bez předvolby)</span></label>";
+        echo "<div style='display:flex;align-items:center;gap:4px'>";
+        echo "<div style='display:flex;align-items:center;border:1px solid #ccc;border-radius:3px;padding:0 4px 0 8px;background:#f5f5f5'><span style='color:#555;font-size:13px'>+</span><input type='text' name='predvolba' value='{$sp_predv}' pattern='[0-9]{1,4}' maxlength='4' style='border:none;outline:none;background:transparent;width:38px;padding:7px 2px;font-size:14px' required></div>";
+        echo "<input type='tel' name='mobil' value='{$sp_mobil}' pattern='[0-9]{9}' maxlength='9' minlength='9' placeholder='123456789' required style='flex:1' title='9 číslic bez předvolby'>";
+        echo "</div></div>";
+        echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='email' value='{$sp_email}' required></div>";
         echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='pocet_lidi' min='1' value='" . esc_attr((string)$pocet) . "' required style='max-width:100px'></div>";
         echo "</div>";
         echo "<button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit změny</button>";
