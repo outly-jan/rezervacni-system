@@ -2082,7 +2082,7 @@ function rs_kalendar_sc(array $atts): string {
         var html = '';
         items.forEach(function(r, i) {
             html += '<div style="border:1px solid #e0e0e0;border-radius:4px;padding:12px;margin-bottom:10px">';
-            html += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">🕐 ' + r.od + ' – ' + r.do + '</div>';
+            html += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">🕐 ' + r.od + ' – ' + r.do + ' <span style="font-weight:normal;color:#c0392b">obsazeno</span></div>';
             if (rsKalPriv) {
                 if (r.nazev)       html += '<div style="margin-bottom:3px"><strong>Název:</strong> ' + escHtml(r.nazev) + '</div>';
                 if (r.rezervujici) html += '<div style="margin-bottom:3px"><strong>Rezervující:</strong> ' + escHtml(r.rezervujici) + '</div>';
@@ -2094,6 +2094,7 @@ function rs_kalendar_sc(array $atts): string {
             }
             html += '</div>';
         });
+        if (!rsKalPriv) html += '<p style="margin:8px 0 0;font-size:12px;color:#888">Pro zobrazení podrobností se přihlaste (jen pro vedení oddílů).</p>';
         if (!html) html = '<p style="color:#777">Žádné detaily k zobrazení.</p>';
         document.getElementById('rs-kal-modal-body').innerHTML = html;
         var modal = document.getElementById('rs-kal-modal');
