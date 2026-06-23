@@ -2277,7 +2277,7 @@ function rs_formular_sc(): string {
         } else {
             $result = rs_zpracuj_externi_formular();
             if (is_string($result)) { $zprava = $result; }
-            else { $hotovo = true; $zprava = rs_alert('Vaše žádost o rezervaci byla přijata! Podrobnosti jsme vám zaslali na e-mail. Rezervace podléhá schválení.'); }
+            else { $hotovo = true; $zprava = rs_alert('Vaši žádost o rezervaci jsme dostali. Podrobnosti jsme vám zaslali na e-mail. Rezervace podléhá schválení. Až ji schválíme, přijde vám e-mail s potvrzením rezervace.'); }
         }
     }
 
