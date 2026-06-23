@@ -1958,14 +1958,20 @@ function rs_kalendar_sc(array $atts): string {
             for ($d = 1; $d <= $days_in_month; $d++) {
                 $stav = $busy[$tid][$d] ?? '';
                 $has_detail = !empty($kal_data[$tid][$d]);
-                $click = $has_detail ? " style='cursor:pointer' onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
-                if ($stav === 'full')    echo "<td{$click}><span class='rs-kal-busy' title='Obsazeno celý den'>✕</span></td>";
-                elseif ($stav === 'partial') echo "<td{$click}><span class='rs-kal-partial' title='Částečně obsazeno'>●</span></td>";
-                else echo "<td><span class='rs-kal-free'>✓</span></td>";
+                $click = $has_detail ? " style='cursor:pointer;position:relative' onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
+                $lupa  = $has_detail ? "<span style='position:absolute;top:1px;right:2px;font-size:7px;opacity:.55;line-height:1;pointer-events:none'>🔍</span>" : '';
+                if ($stav === 'full')         echo "<td{$click}><span class='rs-kal-busy'>✕</span>{$lupa}</td>";
+                elseif ($stav === 'partial')  echo "<td{$click}><span class='rs-kal-partial'>●</span>{$lupa}</td>";
+                else                         echo "<td><span class='rs-kal-free'>✓</span></td>";
             }
             echo "</tr>";
         }
         echo "</tbody></table></div>";
+        echo "<div style='margin:6px 0 10px;font-size:12px;color:#666;display:flex;gap:8px 18px;flex-wrap:wrap'>";
+        echo "<span><span class='rs-kal-free' style='font-size:11px;width:18px;height:18px;line-height:18px'>✓</span> Volno</span>";
+        echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
+        echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
+        echo "</div>";
 
         // Fotky prostoru
         $fotky_p = array_filter(array_map(fn($fid) => wp_get_attachment_image_url((int)$fid,'medium'), (array)get_post_meta($p->ID,'rs_fotky',true)));
@@ -1995,12 +2001,6 @@ function rs_kalendar_sc(array $atts): string {
         }
         echo "</div>";
     }
-
-    echo "<div style='margin-top:16px;font-size:13px;color:#555;display:flex;gap:16px;flex-wrap:wrap'>";
-    echo "<span><span class='rs-kal-free'>✓</span> Volno</span>";
-    echo "<span><span class='rs-kal-partial'>●</span> Částečně obsazeno</span>";
-    echo "<span><span class='rs-kal-busy'>✕</span> Obsazeno celý den</span>";
-    echo "</div>";
 
     $doplnujici = get_option('rs_doplnujici_info','');
     if ($doplnujici) echo "<div style='margin-top:20px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($doplnujici)) . "</div>";
