@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) exit;
 
 add_action('init', 'rs_registruj_post_types');
 function rs_registruj_post_types() {
-    register_post_type('rs_typ',      ['labels' => ['name' => 'Typy prostorů',  'singular_name' => 'Typ prostoru'],  'public' => false, 'show_ui' => false, 'supports' => ['title']]);
+    register_post_type('rs_typ',      ['labels' => ['name' => 'Typy prostor',   'singular_name' => 'Typ prostory'],  'public' => false, 'show_ui' => false, 'supports' => ['title']]);
     register_post_type('rs_prostor',  ['labels' => ['name' => 'Prostory',        'singular_name' => 'Prostor'],        'public' => false, 'show_ui' => false, 'supports' => ['title'], 'hierarchical' => true]);
     register_post_type('rs_rezervace',['labels' => ['name' => 'Rezervace',       'singular_name' => 'Rezervace'],      'public' => false, 'show_ui' => false, 'supports' => ['title']]);
 }
@@ -183,7 +183,7 @@ function rs_notifikuj_nova(int $id) {
     $url     = home_url('/?rs_sprava=' . $token);
 
     if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$prostor}",
-        "Dobrý den,\n\nVaše žádost o rezervaci prostoru {$prostor} (termín: {$od} – {$do_}) byla přijata a čeká na schválení.\n\nOdkaz pro správu rezervace (uschovejte si jej):\n{$url}\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\nVaše žádost o rezervaci prostory {$prostor} (termín: {$od} – {$do_}) byla přijata a čeká na schválení.\n\nOdkaz pro správu rezervace (uschovejte si jej):\n{$url}\n\nSkautské středisko Chlumec");
 
     foreach (rs_spravci_emaily() as $se)
         rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
@@ -197,7 +197,7 @@ function rs_notifikuj_potvrzeni(int $id) {
     $cena    = (float)get_post_meta($id, 'rs_cena_celkem', true);
     $token   = get_post_meta($id, 'rs_token', true);
     rs_mail($email, "Rezervace potvrzena – {$prostor}",
-        "Dobrý den,\n\nVaše rezervace prostoru {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena,0,',',' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\nVaše rezervace prostory {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena,0,',',' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
 }
 
 function rs_notifikuj_zruseni(int $id) {
@@ -205,7 +205,7 @@ function rs_notifikuj_zruseni(int $id) {
     if (!$email) return;
     $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
     rs_mail($email, "Rezervace zrušena – {$prostor}",
-        "Dobrý den,\n\nVaše rezervace prostoru {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla zrušena.\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\nVaše rezervace prostory {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla zrušena.\n\nSkautské středisko Chlumec");
 }
 
 // Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
@@ -225,7 +225,7 @@ function rs_cron_upozorneni_ucastnici() {
         $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
         $token   = get_post_meta($id, 'rs_token', true);
         rs_mail($email, "Upozornění: vyplňte seznam ubytovaných – {$prostor}",
-            "Dobrý den,\n\nVaše rezervace prostoru {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . ".\n\nProsím vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+            "Dobrý den,\n\nVaše rezervace prostory {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . ".\n\nProsím vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
     }
 }
 
@@ -326,7 +326,7 @@ function rs_admin_sc(): string {
     // Navigation
     echo "<div class='rs-menu'>";
     if (rs_ma_pravo('admin')) {
-        echo "<button data-tab='typy'    onclick='rsTab(\"typy\",this)'   >Typy prostorů</button>";
+        echo "<button data-tab='typy'    onclick='rsTab(\"typy\",this)'   >Typy prostor</button>";
         echo "<button data-tab='prostory' onclick='rsTab(\"prostory\",this)'>Prostory</button>";
         echo "<button data-tab='prazdniny' onclick='rsTab(\"prazdniny\",this)'>Prázdniny & Svátky</button>";
         echo "<button data-tab='ceny'    onclick='rsTab(\"ceny\",this)'   >Ceny</button>";
@@ -390,7 +390,7 @@ function rs_sekce_typy(): string {
     $edit_id = (int)($_GET['rs_edit_typ'] ?? 0);
 
     ob_start();
-    echo "<h3 class='rs-section-title'>Typy prostorů</h3>{$zprava}";
+    echo "<h3 class='rs-section-title'>Typy prostor</h3>{$zprava}";
 
     // Form: add / edit
     $edit = $edit_id ? get_post($edit_id) : null;
@@ -440,10 +440,10 @@ function rs_sekce_prostory(): string {
     ob_start();
     echo "<h3 class='rs-section-title'>Prostory & Segmenty</h3>{$zprava}";
 
-    // === Seznam prostorů (vždy nahoře) ===
+    // === Seznam prostor (vždy nahoře) ===
     $url_base = remove_query_arg(['rs_edit_prostor','rs_edit_seg','rs_add_prostor']);
     if ($prostory) {
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostorů</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostor</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
         foreach ($prostory as $p) {
             $typ_id = get_post_meta($p->ID,'rs_typ_id',true);
             $typ_n  = $typ_id ? get_the_title($typ_id) : '–';
@@ -470,7 +470,7 @@ function rs_sekce_prostory(): string {
         echo "</tbody></table></div>";
     }
 
-    // === Formulář prostoru (jen při editaci nebo přidávání) ===
+    // === Formulář prostory (jen při editaci nebo přidávání) ===
     if ($edit || $add_mode) {
         $ma_seg = $edit ? (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1') : false;
         echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($edit ? '✏️ Upravit prostor' : '➕ Přidat prostor') . "</h4>";
@@ -479,8 +479,8 @@ function rs_sekce_prostory(): string {
         if ($edit) echo "<input type='hidden' name='prostor_id' value='{$edit->ID}'>";
 
         echo "<div class='rs-form-row'>";
-        echo "<div class='rs-form-group'><label>Název prostoru *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
-        echo "<div class='rs-form-group'><label>Typ prostoru *</label><select name='prostor_typ' required>";
+        echo "<div class='rs-form-group'><label>Název prostory *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
+        echo "<div class='rs-form-group'><label>Typ prostory *</label><select name='prostor_typ' required>";
         echo "<option value='' disabled" . ($edit && get_post_meta($edit->ID,'rs_typ_id',true) ? '' : ' selected') . ">– vyberte typ –</option>";
         foreach ($typy as $t) {
             $sel = ($edit && get_post_meta($edit->ID,'rs_typ_id',true) == $t->ID) ? 'selected' : '';
@@ -522,13 +522,13 @@ function rs_sekce_prostory(): string {
         echo "<a href='" . esc_url(add_query_arg('rs_add_prostor','1',$url_base)) . "' class='rs-btn rs-btn-primary' style='margin-top:8px'>➕ Přidat prostor</a>";
     }
 
-    // === Segmenty (jen při editaci prostoru se segmenty) ===
+    // === Segmenty (jen při editaci prostory se segmenty) ===
     if ($edit && (get_post_meta($edit->ID,'rs_ma_segmenty',true) === '1')) {
         $ma_seg   = true;
         $segmenty = rs_get_segmenty($edit->ID);
         $edit_seg = $edit_seg_id ? get_post($edit_seg_id) : null;
 
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Segmenty prostoru: " . esc_html($edit->post_title) . "</h4>";
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Segmenty prostory: " . esc_html($edit->post_title) . "</h4>";
 
         echo "<form method='post'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
         echo "<input type='hidden' name='rs_prostor_action' value='" . ($edit_seg ? 'upravit_segment' : 'pridat_segment') . "'>";
@@ -644,8 +644,8 @@ function rs_prostor_zpracuj(string $action): string {
     switch ($action) {
         case 'pridat_prostor': {
             $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
-            if (!$nazev) return rs_alert('Zadejte název prostoru.','error');
-            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostoru.','error');
+            if (!$nazev) return rs_alert('Zadejte název prostory.','error');
+            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostory.','error');
             $ex = get_posts(['post_type'=>'rs_prostor','title'=>$nazev,'post_parent'=>0,'numberposts'=>1,'fields'=>'ids']);
             if ($ex) return rs_alert('Prostor s tímto názvem již existuje.','error');
             $ma_seg = isset($_POST['prostor_ma_segmenty']) ? '1' : '0';
@@ -665,7 +665,7 @@ function rs_prostor_zpracuj(string $action): string {
         case 'upravit_prostor': {
             $id = (int)($_POST['prostor_id'] ?? 0);
             if (!$id) return '';
-            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostoru.','error');
+            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostory.','error');
             $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
             wp_update_post(['ID'=>$id,'post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['prostor_popis']??'')]);
             update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
@@ -987,7 +987,7 @@ function rs_sekce_ceny(): string {
     $sel_pid  = (int)($_POST['ceny_prostor_id'] ?? ($_GET['ceny_pid'] ?? ($prostory[0]->ID ?? 0)));
 
     ob_start();
-    echo "<h3 class='rs-section-title'>Ceník prostorů</h3>{$zprava}";
+    echo "<h3 class='rs-section-title'>Ceník prostor</h3>{$zprava}";
     echo "<div class='rs-card'>";
     echo "<form method='post'>" . wp_nonce_field('rs_ceny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_ceny_action' value='ulozit'>";
@@ -1434,7 +1434,7 @@ function rs_notifikuj_ucastnici(int $id, array $ucastnici) {
     $od = get_post_meta($id,'rs_datum_od',true);
     $do_ = get_post_meta($id,'rs_datum_do',true);
 
-    $body = "Seznam ubytovaných pro rezervaci prostoru {$prostor} ({$od} – {$do_}):\n\n";
+    $body = "Seznam ubytovaných pro rezervaci prostory {$prostor} ({$od} – {$do_}):\n\n";
     $body .= str_pad('Jméno',20) . str_pad('Příjmení',20) . str_pad('Dat. nar.',14) . "Adresa\n";
     $body .= str_repeat('-',80) . "\n";
     foreach ($ucastnici as $u) {
@@ -1879,7 +1879,7 @@ function rs_kalendar_sc(array $atts): string {
 
     ob_start();
     echo "<div class='rs-wrap'>";
-    echo "<h3 style='margin-bottom:20px'>Obsazenost prostorů</h3>";
+    echo "<h3 style='margin-bottom:20px'>Obsazenost prostor</h3>";
 
     // URL stránky s rezervačním formulářem: option → auto-detekce → prázdné
     $form_url = get_option('rs_formular_url', '');
@@ -1889,7 +1889,7 @@ function rs_kalendar_sc(array $atts): string {
         $form_url = $form_row ? get_permalink($form_row->ID) : '';
     }
 
-    // Typy prostorů (pre-fetch)
+    // Typy prostor (pre-fetch)
     $p_typy = [];
     foreach ($prostory as $p) {
         $tid = (int)get_post_meta($p->ID,'rs_typ_id',true);
@@ -1913,7 +1913,7 @@ function rs_kalendar_sc(array $atts): string {
         if ($p_typy[$p->ID]) echo "<p style='margin:0 0 10px;font-size:13px;color:#666'>" . esc_html($p_typy[$p->ID]) . "</p>";
         $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
 
-        // Info blok pod názvem prostoru
+        // Info blok pod názvem prostory
         $p_popis  = trim($p->post_content);
         $p_adresa = get_post_meta($p->ID,'rs_adresa',true);
         $p_gps    = get_post_meta($p->ID,'rs_gps',true);
@@ -2017,7 +2017,7 @@ function rs_kalendar_sc(array $atts): string {
         $btn_href = $form_url ? esc_url($form_url) : '#';
         echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat prostory</a></div>";
 
-        // Fotky prostoru a segmentů s lightbox podporou
+        // Fotky prostory a segmentů s lightbox podporou
         $fotky_p = [];
         foreach ((array)get_post_meta($p->ID,'rs_fotky',true) as $fid) {
             $thumb = wp_get_attachment_image_url((int)$fid,'medium');
@@ -2247,7 +2247,7 @@ function rs_formular_sc(): string {
         return ob_get_clean();
     }
 
-    echo "<h3 style='margin-bottom:16px'>Žádost o rezervaci prostoru</h3>{$zprava}";
+    echo "<h3 style='margin-bottom:16px'>Žádost o rezervaci prostory</h3>{$zprava}";
 
     echo "<form method='post' id='rs-ext-form'>" . wp_nonce_field('rs_formular','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_formular_odeslat' value='1'>";
