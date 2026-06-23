@@ -1895,6 +1895,11 @@ function rs_kalendar_sc(array $atts): string {
     echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
     echo "</div>";
 
+    // URL stránky s rezervačním formulářem (hledá shortcode [rs_formular])
+    global $wpdb;
+    $form_row = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_formular]%' LIMIT 1");
+    $form_url = $form_row ? get_permalink($form_row->ID) : '';
+
     foreach ($prostory as $p) {
         echo "<div style='margin-bottom:28px'>";
         echo "<h4 style='color:#1a5c2a;margin-bottom:8px'>" . esc_html($p->post_title) . "</h4>";
@@ -1979,6 +1984,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "</div>";
+        if ($form_url) echo "<div style='margin:10px 0 14px'><a href='" . esc_url($form_url) . "' class='rs-btn' style='font-size:15px;padding:10px 22px'>📅 Rezervovat prostory</a></div>";
 
         // Fotky prostoru a segmentů s lightbox podporou
         $fotky_p = [];
