@@ -1894,6 +1894,7 @@ function rs_kalendar_sc(array $atts): string {
     echo "</form>";
     echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
     echo "</div>";
+    echo "<h2 style='color:#1a5c2a;margin:0 0 20px;font-size:1.4em;font-weight:600'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</h2>";
 
     foreach ($prostory as $p) {
         echo "<div style='margin-bottom:28px'>";
