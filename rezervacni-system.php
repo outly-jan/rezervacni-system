@@ -148,8 +148,23 @@ function rs_vypocti_cenu(int $prostor_id, array $seg_ids, int $pocet_lidi, strin
 
 // ═══ ARES ════════════════════════════════════════════════════════════════════
 
-add_action('wp_ajax_nopriv_rs_ares', 'rs_ares_ajax');
-add_action('wp_ajax_rs_ares',        'rs_ares_ajax');
+add_action('wp_ajax_nopriv_rs_ares',       'rs_ares_ajax');
+add_action('wp_ajax_rs_ares',             'rs_ares_ajax');
+add_action('wp_ajax_nopriv_rs_check_volno', 'rs_ajax_check_volno');
+add_action('wp_ajax_rs_check_volno',        'rs_ajax_check_volno');
+function rs_ajax_check_volno(): void {
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'rs_public')) wp_send_json_error('nonce');
+    $pid    = (int)($_POST['prostor_id'] ?? 0);
+    $od_raw = sanitize_text_field($_POST['datum_od'] ?? '');
+    $do_raw = sanitize_text_field($_POST['datum_do'] ?? '');
+    if (!$pid || !$od_raw || !$do_raw) { wp_send_json_success(null); return; }
+    $cd  = !empty($_POST['cely_den']);
+    $od  = $cd ? $od_raw . ' 00:00:00' : str_replace('T', ' ', $od_raw) . ':00';
+    $do_ = $cd ? $do_raw . ' 23:59:00' : str_replace('T', ' ', $do_raw) . ':00';
+    if (strtotime($od) >= strtotime($do_)) { wp_send_json_success(null); return; }
+    $seg_ids = array_map('intval', (array)($_POST['seg_ids'] ?? []));
+    wp_send_json_success(['volno' => rs_je_volno($pid, $seg_ids, $od, $do_)]);
+}
 function rs_ares_ajax() {
     if (!wp_verify_nonce($_POST['nonce'] ?? '', 'rs_public')) wp_send_json_error('Unauthorized');
     $ico = str_pad(preg_replace('/\D/', '', sanitize_text_field($_POST['ico'] ?? '')), 8, '0', STR_PAD_LEFT);
@@ -2400,6 +2415,13 @@ function rs_formular_sc(): string {
         }
     }
 
+    $old         = (!$hotovo && $zprava) ? $_POST : [];
+    $old_typ     = $old['rez_typ']          ?? 'fyzicka';
+    $old_prostor = (int)($old['ext_prostor_id'] ?? 0);
+    $old_segs    = array_map('intval', (array)($old['ext_segmenty'] ?? []));
+    $old_cd      = !empty($old['ext_cely_den']);
+    $ov          = fn(string $k, string $d = '') => ' value="' . esc_attr($old[$k] ?? $d) . '"';
+
     $prostory = rs_get_prostory();
     ob_start();
     rs_css();
@@ -2426,37 +2448,37 @@ function rs_formular_sc(): string {
     // Typ rezervujícího
     echo "<div class='rs-card'><h4 class='rs-card-title'>Kdo rezervuje?</h4>";
     echo "<div class='rs-form-group'>";
-    echo "<label style='font-weight:normal;margin-right:16px'><input type='radio' name='rez_typ' value='fyzicka' checked onchange='rsRezTypChange(this.value)'> Fyzická osoba</label>";
-    echo "<label style='font-weight:normal'><input type='radio' name='rez_typ' value='pravnicka' onchange='rsRezTypChange(this.value)'> Právnická osoba</label>";
+    echo "<label style='font-weight:normal;margin-right:16px'><input type='radio' name='rez_typ' value='fyzicka'" . ($old_typ !== 'pravnicka' ? ' checked' : '') . " onchange='rsRezTypChange(this.value)'> Fyzická osoba</label>";
+    echo "<label style='font-weight:normal'><input type='radio' name='rez_typ' value='pravnicka'" . ($old_typ === 'pravnicka' ? ' checked' : '') . " onchange='rsRezTypChange(this.value)'> Právnická osoba</label>";
     echo "</div>";
 
     // Fyzická osoba
-    echo "<div id='rs-ext-fyzicka'>";
+    echo "<div id='rs-ext-fyzicka'" . ($old_typ === 'pravnicka' ? " style='display:none'" : '') . ">";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno' required data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno'" . $ov('fyzicka_jmeno') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni'" . $ov('fyzicka_prijmeni') . " required data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar' required data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar'" . $ov('fyzicka_datum_nar') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste'" . $ov('fyzicka_bydliste') . " required data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil' required data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil'" . $ov('fyzicka_mobil') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email'" . $ov('fyzicka_email') . " required data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // fyzicka
 
     // Právnická osoba
-    echo "<div id='rs-ext-pravnicka' style='display:none'>";
+    echo "<div id='rs-ext-pravnicka'" . ($old_typ !== 'pravnicka' ? " style='display:none'" : '') . ">";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>IČO *</label><div style='display:flex;gap:8px;align-items:center'><input type='text' name='pravnicka_ico' id='rs-ico' maxlength='8' style='width:130px'><button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAresLoad()'>🔍 Načíst z ARES</button></div></div>";
+    echo "<div class='rs-form-group'><label>IČO *</label><div style='display:flex;gap:8px;align-items:center'><input type='text' name='pravnicka_ico' id='rs-ico' maxlength='8' style='width:130px'" . $ov('pravnicka_ico') . "><button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAresLoad()'>🔍 Načíst z ARES</button></div></div>";
     echo "</div>";
-    echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev' data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev'" . $ov('pravnicka_nazev') . " data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo'" . $ov('pravnicka_sidlo') . " data-rs-cond></div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt' data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil' data-rs-cond></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt'" . $ov('pravnicka_kontakt') . " data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil'" . $ov('pravnicka_mobil') . " data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email'" . $ov('pravnicka_email') . " data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // pravnicka
     echo "</div>"; // card
@@ -2465,21 +2487,27 @@ function rs_formular_sc(): string {
     echo "<div class='rs-card'><h4 class='rs-card-title'>Prostor a termín</h4>";
     echo "<div class='rs-form-group'><label>Prostor *</label><select name='ext_prostor_id' id='rs-ext-prostor' onchange='rsExtProstorChange(this.value)' required>";
     echo "<option value=''>– vyberte –</option>";
-    foreach ($prostory as $p) echo "<option value='{$p->ID}'>" . esc_html($p->post_title) . "</option>";
+    foreach ($prostory as $p) {
+        $sel = $old_prostor === $p->ID ? ' selected' : '';
+        echo "<option value='{$p->ID}'{$sel}>" . esc_html($p->post_title) . "</option>";
+    }
     echo "</select></div>";
 
     echo "<div id='rs-ext-seg-wrap' style='display:none' class='rs-form-group'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-ext-seg-list'></div></div>";
 
-    echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='ext_cely_den' onchange='rsCelyDen(this,\"ext\")' style='width:auto'> Celý den</label></div>";
-    echo "<div id='rs-ext-cas-wrap'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required onchange='var d=document.querySelector(\"[name=ext_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
-    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900' required></div>";
+    $cas_style = $old_cd ? " style='display:none'" : '';
+    $den_style = $old_cd ? '' : " style='display:none'";
+    echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='ext_cely_den'" . ($old_cd ? ' checked' : '') . " onchange='rsCelyDen(this,\"ext\")' style='width:auto'> Celý den</label></div>";
+    echo "<div id='rs-ext-cas-wrap'{$cas_style}><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900'" . ($old_cd ? '' : ' required') . $ov('ext_datum_od') . " onchange='var d=document.querySelector(\"[name=ext_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsCheckVolno();'></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900'" . ($old_cd ? '' : ' required') . $ov('ext_datum_do') . " onchange='rsCheckVolno();'></div>";
     echo "</div></div>";
-    echo "<div id='rs-ext-den-wrap' style='display:none'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den' onchange='var d=document.querySelector(\"[name=ext_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='ext_datum_do_den'></div>";
+    echo "<div id='rs-ext-den-wrap'{$den_style}><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den'" . ($old_cd ? ' required' : '') . $ov('ext_datum_od_den') . " onchange='var d=document.querySelector(\"[name=ext_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsCheckVolno();'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='ext_datum_do_den'" . ($old_cd ? ' required' : '') . $ov('ext_datum_do_den') . " onchange='rsCheckVolno();'></div>";
     echo "</div></div>";
-    echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet' value='1' min='1' max='500' required style='width:100px'></div>";
+    echo "<div id='rs-ext-avail' style='font-size:13px;margin-top:2px;margin-bottom:10px'></div>";
+    echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet'" . $ov('ext_pocet', '1') . " min='1' max='500' required style='width:100px'></div>";
 
     if (get_option('rs_vzdusne_aktivni') === '1') {
         echo "<div class='rs-form-group' style='background:#fff8e1;border:1px solid #ffc107;border-radius:3px;padding:10px'>";
@@ -2487,7 +2515,8 @@ function rs_formular_sc(): string {
         echo "</div>";
     }
 
-    echo "<div class='rs-form-group'><label>Poznámka / dotaz</label><textarea name='ext_poznamka' rows='3'></textarea></div>";
+    $old_poznamka = esc_textarea($old['ext_poznamka'] ?? '');
+    echo "<div class='rs-form-group'><label>Poznámka / dotaz</label><textarea name='ext_poznamka' rows='3'>{$old_poznamka}</textarea></div>";
     echo "</div>"; // card
 
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>Odeslat žádost o rezervaci</button></div>";
@@ -2519,10 +2548,50 @@ function rs_formular_sc(): string {
         var list=document.getElementById('rs-ext-seg-list');
         list.innerHTML='';
         if(rsExtSegData[pid]){
-            rsExtSegData[pid].forEach(function(s){list.innerHTML+='<label style="display:block;margin-bottom:4px"><input type="checkbox" name="ext_segmenty[]" value="'+s.id+'"> '+s.nazev+'</label>';});
+            rsExtSegData[pid].forEach(function(s){list.innerHTML+='<label style="display:block;margin-bottom:4px"><input type="checkbox" name="ext_segmenty[]" value="'+s.id+'" onchange="rsCheckVolno()"> '+s.nazev+'</label>';});
             wrap.style.display='';
         } else { wrap.style.display='none'; }
+        rsCheckVolno();
     }
+    var rsCheckVolnoNonce = '<?php echo wp_create_nonce('rs_public'); ?>';
+    var rsAjaxUrl = '<?php echo admin_url('admin-ajax.php'); ?>';
+    var rsCheckVolnoTimer = null;
+    function rsCheckVolno(){
+        clearTimeout(rsCheckVolnoTimer);
+        rsCheckVolnoTimer = setTimeout(function(){
+            var pid = document.getElementById('rs-ext-prostor').value;
+            var el  = document.getElementById('rs-ext-avail');
+            if(!pid){ el.innerHTML=''; return; }
+            var cd  = document.querySelector('[name=ext_cely_den]').checked;
+            var od  = cd ? (document.querySelector('[name=ext_datum_od_den]')||{}).value : (document.querySelector('[name=ext_datum_od]')||{}).value;
+            var do_ = cd ? (document.querySelector('[name=ext_datum_do_den]')||{}).value : (document.querySelector('[name=ext_datum_do]')||{}).value;
+            if(!od||!do_){ el.innerHTML=''; return; }
+            el.innerHTML='<span style="color:#888">Kontroluji dostupnost…</span>';
+            var segs = Array.from(document.querySelectorAll('[name="ext_segmenty[]"]:checked')).map(function(c){return '&seg_ids[]='+c.value;}).join('');
+            fetch(rsAjaxUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                body:'action=rs_check_volno&nonce='+rsCheckVolnoNonce+'&prostor_id='+encodeURIComponent(pid)+'&datum_od='+encodeURIComponent(od)+'&datum_do='+encodeURIComponent(do_)+'&cely_den='+(cd?'1':'')+segs})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if(!d.success||d.data===null){el.innerHTML='';return;}
+                el.innerHTML = d.data.volno
+                    ? '<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>'
+                    : '<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+            }).catch(function(){el.innerHTML='';});
+        }, 400);
+    }
+    <?php if ($old_prostor): ?>
+    document.addEventListener('DOMContentLoaded', function(){
+        rsExtProstorChange(<?php echo $old_prostor; ?>);
+        var oldSegs = <?php echo json_encode($old_segs); ?>;
+        setTimeout(function(){
+            oldSegs.forEach(function(sid){
+                var cb = document.querySelector('[name="ext_segmenty[]"][value="'+sid+'"]');
+                if(cb) cb.checked = true;
+            });
+            rsCheckVolno();
+        }, 100);
+    });
+    <?php endif; ?>
     function rsAresLoad(){
         var ico=document.getElementById('rs-ico').value.replace(/\D/g,'');
         if(ico.length<7){alert('Zadejte IČO');return;}
