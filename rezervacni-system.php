@@ -2573,14 +2573,18 @@ function rs_formular_sc(): string {
             .then(function(r){return r.json();})
             .then(function(d){
                 if(!d.success||d.data===null){el.innerHTML='';return;}
-                el.innerHTML = d.data.volno
-                    ? '<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>'
-                    : '<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+                if(d.data.volno){
+                    el.innerHTML='<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>';
+                    document.querySelectorAll('.rs-alert').forEach(function(a){a.style.display='none';});
+                } else {
+                    el.innerHTML='<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+                }
             }).catch(function(){el.innerHTML='';});
         }, 400);
     }
-    <?php if ($old_prostor): ?>
     document.addEventListener('DOMContentLoaded', function(){
+        rsRezTypChange('<?php echo esc_js($old_typ); ?>');
+        <?php if ($old_prostor): ?>
         rsExtProstorChange(<?php echo $old_prostor; ?>);
         var oldSegs = <?php echo json_encode($old_segs); ?>;
         setTimeout(function(){
@@ -2590,8 +2594,8 @@ function rs_formular_sc(): string {
             });
             rsCheckVolno();
         }, 100);
+        <?php endif; ?>
     });
-    <?php endif; ?>
     function rsAresLoad(){
         var ico=document.getElementById('rs-ico').value.replace(/\D/g,'');
         if(ico.length<7){alert('Zadejte IČO');return;}
