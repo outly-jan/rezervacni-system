@@ -480,8 +480,8 @@ function rs_sekce_prostory(): string {
 
         echo "<div class='rs-form-row'>";
         echo "<div class='rs-form-group'><label>Název prostoru *</label><input type='text' name='prostor_nazev' value='" . esc_attr($edit ? $edit->post_title : '') . "' required></div>";
-        echo "<div class='rs-form-group'><label>Typ prostoru</label><select name='prostor_typ'>";
-        echo "<option value=''>– bez typu –</option>";
+        echo "<div class='rs-form-group'><label>Typ prostoru *</label><select name='prostor_typ' required>";
+        echo "<option value='' disabled" . ($edit && get_post_meta($edit->ID,'rs_typ_id',true) ? '' : ' selected') . ">– vyberte typ –</option>";
         foreach ($typy as $t) {
             $sel = ($edit && get_post_meta($edit->ID,'rs_typ_id',true) == $t->ID) ? 'selected' : '';
             echo "<option value='{$t->ID}' {$sel}>" . esc_html($t->post_title) . "</option>";
@@ -645,6 +645,7 @@ function rs_prostor_zpracuj(string $action): string {
         case 'pridat_prostor': {
             $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
             if (!$nazev) return rs_alert('Zadejte název prostoru.','error');
+            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostoru.','error');
             $ex = get_posts(['post_type'=>'rs_prostor','title'=>$nazev,'post_parent'=>0,'numberposts'=>1,'fields'=>'ids']);
             if ($ex) return rs_alert('Prostor s tímto názvem již existuje.','error');
             $ma_seg = isset($_POST['prostor_ma_segmenty']) ? '1' : '0';
@@ -664,6 +665,7 @@ function rs_prostor_zpracuj(string $action): string {
         case 'upravit_prostor': {
             $id = (int)($_POST['prostor_id'] ?? 0);
             if (!$id) return '';
+            if (!(int)($_POST['prostor_typ']??0)) return rs_alert('Vyberte typ prostoru.','error');
             $nazev = sanitize_text_field($_POST['prostor_nazev'] ?? '');
             wp_update_post(['ID'=>$id,'post_title'=>$nazev,'post_content'=>sanitize_textarea_field($_POST['prostor_popis']??'')]);
             update_post_meta($id,'rs_typ_id',(int)($_POST['prostor_typ']??0));
