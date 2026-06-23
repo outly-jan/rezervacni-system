@@ -1148,7 +1148,7 @@ function rs_sekce_nastaveni(): string {
 
     // URL rezervačního formuláře
     echo "<div class='rs-card'><h4 class='rs-card-title'>URL rezervačního formuláře</h4>";
-    echo "<div class='rs-form-group'><label style='font-weight:normal;font-size:13px;color:#555;margin-bottom:6px;display:block'>Adresa stránky se shortcode [rs_formular]. Zobrazí se jako tlačítko „Rezervovat prostory" v kalendáři.</label>";
+    echo "<div class='rs-form-group'><label style='font-weight:normal;font-size:13px;color:#555;margin-bottom:6px;display:block'>Adresa stránky se shortcode [rs_formular]. Zobrazí se jako tlačítko &bdquo;Rezervovat prostory&rdquo; v kalendáři.</label>";
     echo "<input type='url' name='formular_url' value='" . esc_attr($formular_url_opt) . "' placeholder='https://www.example.com/rezervace/' style='max-width:520px'></div>";
     echo "</div>";
 
