@@ -1874,11 +1874,11 @@ function rs_kalendar_sc(array $atts): string {
         }
     }
 
-    $prev_url = add_query_arg(['rs_rok' => $mesic === 1 ? $rok-1 : $rok, 'rs_mesic' => $mesic === 1 ? 12 : $mesic-1]);
-    $next_url = add_query_arg(['rs_rok' => $mesic === 12 ? $rok+1 : $rok, 'rs_mesic' => $mesic === 12 ? 1 : $mesic+1]);
+    $prev_url = add_query_arg(['rs_rok' => $mesic === 1 ? $rok-1 : $rok, 'rs_mesic' => $mesic === 1 ? 12 : $mesic-1]) . '#rs-kalendar';
+    $next_url = add_query_arg(['rs_rok' => $mesic === 12 ? $rok+1 : $rok, 'rs_mesic' => $mesic === 12 ? 1 : $mesic+1]) . '#rs-kalendar';
 
     ob_start();
-    echo "<div class='rs-wrap'>";
+    echo "<div class='rs-wrap' id='rs-kalendar'>";
     echo "<h3 style='margin-bottom:20px'>Obsazenost prostor</h3>";
 
     // URL stránky s rezervačním formulářem: option → auto-detekce → prázdné
@@ -1957,7 +1957,7 @@ function rs_kalendar_sc(array $atts): string {
         // Navigace
         echo "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px'>";
         echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
-        echo "<form method='get' style='display:flex;gap:6px;align-items:center'>";
+        echo "<form method='get' action='#rs-kalendar' style='display:flex;gap:6px;align-items:center'>";
         foreach ($_GET as $k => $v)
             if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
                 echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
