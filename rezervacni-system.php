@@ -213,8 +213,25 @@ function rs_format_datum(string $d): string {
 }
 
 function rs_sprava_url(string $token): string {
-    $base = get_option('rs_formular_url', '') ?: home_url('/');
+    global $wpdb;
+    $base = get_option('rs_formular_url', '');
+    if (!$base) {
+        $row  = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_formular]%' LIMIT 1");
+        $base = $row ? (string)get_permalink((int)$row->ID) : home_url('/');
+    }
     return add_query_arg('rs_sprava', $token, rtrim($base, '/') . '/');
+}
+
+function rs_prostor_label(int $prostor_id, array $seg_ids = []): string {
+    $prostor = html_entity_decode(get_the_title($prostor_id), ENT_QUOTES | ENT_HTML5);
+    $typ_id  = (int)get_post_meta($prostor_id, 'rs_typ_id', true);
+    $typ     = $typ_id ? html_entity_decode(get_the_title($typ_id), ENT_QUOTES | ENT_HTML5) : '';
+    $label   = $prostor . ($typ ? ' (' . $typ . ')' : '');
+    if (!empty($seg_ids)) {
+        $segs  = array_map(fn($sid) => html_entity_decode(get_the_title((int)$sid), ENT_QUOTES | ENT_HTML5), $seg_ids);
+        $label = implode(', ', $segs) . ', ' . $label;
+    }
+    return $label;
 }
 
 function rs_admin_url(): string {
@@ -261,7 +278,8 @@ define('RS_PODPIS', "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černé
 function rs_notifikuj_nova(int $id) {
     $email      = get_post_meta($id, 'rs_email', true);
     $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
-    $prostor    = html_entity_decode(get_the_title($prostor_id), ENT_QUOTES | ENT_HTML5);
+    $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label      = rs_prostor_label($prostor_id, $seg_ids);
     $od_raw     = get_post_meta($id, 'rs_datum_od', true);
     $do_raw     = get_post_meta($id, 'rs_datum_do', true);
     $od         = rs_format_datum($od_raw);
@@ -269,13 +287,13 @@ function rs_notifikuj_nova(int $id) {
     $token      = get_post_meta($id, 'rs_token', true);
     $url        = rs_sprava_url($token);
 
-    if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$prostor}",
-        "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$prostor} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . RS_PODPIS);
+    if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$label}",
+        "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . RS_PODPIS);
 
     $prehled = rs_rez_prehled($prostor_id, $od_raw, $do_raw, $id);
     foreach (rs_spravci_emaily() as $se)
-        rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
-            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nTermín: {$od} – {$do_}\n\n"
+        rs_mail($se, "Nová žádost o rezervaci – {$label}",
+            "Nová žádost o rezervaci.\n\nProstor: {$label}\nTermín: {$od} – {$do_}\n\n"
             . ($prehled ? $prehled . "\n\n" : '')
             . "--- Žadatel ---\n" . rs_rez_udaje($id)
             . "\n\nAdministrace: " . rs_admin_url(),
@@ -285,23 +303,27 @@ function rs_notifikuj_nova(int $id) {
 function rs_notifikuj_potvrzeni(int $id) {
     $email = get_post_meta($id, 'rs_email', true);
     if (!$email) return;
-    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
-    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
-    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
-    $cena    = (float)get_post_meta($id, 'rs_cena_celkem', true);
-    $token   = get_post_meta($id, 'rs_token', true);
-    rs_mail($email, "Rezervace potvrzena – {$prostor}",
-        "Dobrý den,\n\nvaše rezervace prostory {$prostor} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
+    $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label      = rs_prostor_label($prostor_id, $seg_ids);
+    $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    $cena       = (float)get_post_meta($id, 'rs_cena_celkem', true);
+    $token      = get_post_meta($id, 'rs_token', true);
+    rs_mail($email, "Rezervace potvrzena – {$label}",
+        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
 }
 
 function rs_notifikuj_zruseni(int $id) {
     $email = get_post_meta($id, 'rs_email', true);
     if (!$email) return;
-    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
-    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
-    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
-    rs_mail($email, "Rezervace zrušena – {$prostor}",
-        "Dobrý den,\n\nvaše rezervace prostory {$prostor} na termín {$od} – {$do_} byla zrušena.\n\n" . RS_PODPIS);
+    $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label      = rs_prostor_label($prostor_id, $seg_ids);
+    $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    rs_mail($email, "Rezervace zrušena – {$label}",
+        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . RS_PODPIS);
 }
 
 // Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
