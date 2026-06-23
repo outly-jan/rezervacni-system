@@ -2314,16 +2314,16 @@ function rs_formular_sc(): string {
     // Fyzická osoba
     echo "<div id='rs-ext-fyzicka'>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno' required></div>";
-    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni' required></div>";
+    echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni' required data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar' required></div>";
-    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste' required></div>";
+    echo "<div class='rs-form-group'><label>Datum narození *</label><input type='date' name='fyzicka_datum_nar' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Bydliště *</label><input type='text' name='fyzicka_bydliste' required data-rs-cond></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil' required></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email' required></div>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='fyzicka_mobil' required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email' required data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // fyzicka
 
@@ -2332,12 +2332,12 @@ function rs_formular_sc(): string {
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>IČO *</label><div style='display:flex;gap:8px;align-items:center'><input type='text' name='pravnicka_ico' id='rs-ico' maxlength='8' style='width:130px'><button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAresLoad()'>🔍 Načíst z ARES</button></div></div>";
     echo "</div>";
-    echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev' required></div>";
-    echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo' required></div>";
+    echo "<div class='rs-form-group'><label>Název organizace *</label><input type='text' name='pravnicka_nazev' id='rs-nazev' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Sídlo *</label><input type='text' name='pravnicka_sidlo' id='rs-sidlo' data-rs-cond></div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt' required></div>";
-    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil' required></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email' required></div>";
+    echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='pravnicka_kontakt' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='pravnicka_mobil' data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email' data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // pravnicka
     echo "</div>"; // card
@@ -2383,8 +2383,8 @@ function rs_formular_sc(): string {
     function rsRezTypChange(val){
         document.getElementById('rs-ext-fyzicka').style.display  = val==='fyzicka'   ? '' : 'none';
         document.getElementById('rs-ext-pravnicka').style.display = val==='pravnicka' ? '' : 'none';
-        document.querySelectorAll('#rs-ext-fyzicka [required]').forEach(function(el){el.required = val==='fyzicka';});
-        document.querySelectorAll('#rs-ext-pravnicka [required]').forEach(function(el){el.required = val==='pravnicka';});
+        document.querySelectorAll('#rs-ext-fyzicka [data-rs-cond]').forEach(function(el){el.required = val==='fyzicka';});
+        document.querySelectorAll('#rs-ext-pravnicka [data-rs-cond]').forEach(function(el){el.required = val==='pravnicka';});
     }
     var rsExtSegData = <?php
         $sd = [];
