@@ -1536,11 +1536,11 @@ function rs_sekce_interni(): string {
     echo "<div id='rs-int-panel-jedno'>";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='int_cely_den' onchange='rsCelyDen(this,\"int\")' style='width:auto'> Celý den</label></div>";
     echo "<div id='rs-int-cas-wrap'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900' onchange='var d=document.querySelector(\"[name=int_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
     echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900'></div>";
     echo "</div></div>";
     echo "<div id='rs-int-den-wrap' style='display:none'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den' onchange='var d=document.querySelector(\"[name=int_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
     echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='int_datum_do_den'></div>";
     echo "</div></div>";
     echo "</div>";
@@ -2163,11 +2163,19 @@ function rs_kalendar_sc(array $atts): string {
             if (dtDo && dtDo.value) dDo.value = dtDo.value.split('T')[0];
             casWrap.style.display = 'none';
             denWrap.style.display = '';
+            if (dtOd) dtOd.required = false;
+            if (dtDo) dtDo.required = false;
+            if (dOd)  dOd.required  = true;
+            if (dDo)  dDo.required  = true;
         } else {
             if (dOd && dOd.value) dtOd.value = dOd.value + 'T00:00';
             if (dDo && dDo.value) dtDo.value = dDo.value + 'T00:00';
             casWrap.style.display = '';
             denWrap.style.display = 'none';
+            if (dtOd) dtOd.required = true;
+            if (dtDo) dtDo.required = true;
+            if (dOd)  dOd.required  = false;
+            if (dDo)  dDo.required  = false;
         }
     }
     function rsKalNav(sel) {
@@ -2345,11 +2353,11 @@ function rs_formular_sc(): string {
 
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='ext_cely_den' onchange='rsCelyDen(this,\"ext\")' style='width:auto'> Celý den</label></div>";
     echo "<div id='rs-ext-cas-wrap'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required onchange='var d=document.querySelector(\"[name=ext_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
     echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900' required></div>";
     echo "</div></div>";
     echo "<div id='rs-ext-den-wrap' style='display:none'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den' onchange='var d=document.querySelector(\"[name=ext_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
     echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='ext_datum_do_den'></div>";
     echo "</div></div>";
     echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet' value='1' min='1' max='500' required style='width:100px'></div>";
@@ -2419,11 +2427,19 @@ function rs_formular_sc(): string {
             if (dtDo && dtDo.value) dDo.value = dtDo.value.split('T')[0];
             casWrap.style.display = 'none';
             denWrap.style.display = '';
+            if (dtOd) dtOd.required = false;
+            if (dtDo) dtDo.required = false;
+            if (dOd)  dOd.required  = true;
+            if (dDo)  dDo.required  = true;
         } else {
             if (dOd && dOd.value) dtOd.value = dOd.value + 'T00:00';
             if (dDo && dDo.value) dtDo.value = dDo.value + 'T00:00';
             casWrap.style.display = '';
             denWrap.style.display = 'none';
+            if (dtOd) dtOd.required = true;
+            if (dtDo) dtDo.required = true;
+            if (dOd)  dOd.required  = false;
+            if (dDo)  dDo.required  = false;
         }
     }
     </script>
