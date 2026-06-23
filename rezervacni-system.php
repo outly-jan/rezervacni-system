@@ -1936,7 +1936,8 @@ function rs_kalendar_sc(array $atts): string {
     $is_privileged = rs_ma_pravo('vedeni');
 
     // Sestavit mapu obsazenosti + detail dat pro JS
-    $busy     = []; // [tid][den] = 'full'|'partial'
+    $busy    = []; // [tid][den] = 'full'|'partial'
+    $pending = []; // [tid][den] = true  (má aspoň jednu rezervaci čekající na schválení)
     $kal_data = []; // [tid][den][] = detail pole
 
     foreach ($rezervace as $r) {
@@ -1945,12 +1946,14 @@ function rs_kalendar_sc(array $atts): string {
         $r_od_ts  = (int)(strtotime(get_post_meta($r->ID,'rs_datum_od',true)) ?: 0);
         $r_do_ts  = (int)(strtotime(get_post_meta($r->ID,'rs_datum_do',true)) ?: 0);
         $typ      = get_post_meta($r->ID,'rs_typ_rezervace',true);
+        $r_stav   = get_post_meta($r->ID,'rs_stav',true);
         $target_ids = empty($segs) ? [$pid] : $segs;
 
         $detail = [
-            'od'  => $r_od_ts ? date('H:i', $r_od_ts) : '',
-            'do'  => $r_do_ts ? date('H:i', $r_do_ts) : '',
-            'typ' => $typ,
+            'od'   => $r_od_ts ? date('H:i', $r_od_ts) : '',
+            'do'   => $r_do_ts ? date('H:i', $r_do_ts) : '',
+            'typ'  => $typ,
+            'stav' => $r_stav,
         ];
         if ($is_privileged) {
             $rez_uid  = (int)get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: (int)get_post_meta($r->ID,'rs_wp_user_id',true);
@@ -1965,13 +1968,14 @@ function rs_kalendar_sc(array $atts): string {
 
         for ($d = 1; $d <= $days_in_month; $d++) {
             $day_start = mktime(0,0,0,$mesic,$d,$rok);
-            $day_end   = mktime(23,59,59,$mesic,$d,$rok);
+            $day_end   = mktime(23,59,0,$mesic,$d,$rok); // 23:59:00 – odpovídá "celý den" rezervacím
             if ($r_od_ts <= $day_end && $r_do_ts >= $day_start) {
                 $coverage = ($r_od_ts <= $day_start && $r_do_ts >= $day_end) ? 'full' : 'partial';
                 foreach ($target_ids as $tid) {
                     if (empty($busy[$tid][$d]) || ($busy[$tid][$d] === 'partial' && $coverage === 'full')) {
                         $busy[$tid][$d] = $coverage;
                     }
+                    if ($r_stav === 'cekajici') $pending[$tid][$d] = true;
                     $kal_data[$tid][$d][] = $detail;
                 }
             }
@@ -2144,8 +2148,9 @@ function rs_kalendar_sc(array $atts): string {
                 $has_detail = !empty($kal_data[$tid][$d]);
                 $click = $has_detail ? " style='cursor:pointer;position:relative' onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
                 $lupa  = $has_detail ? "<span style='position:absolute;top:1px;right:2px;font-size:7px;opacity:.55;line-height:1;pointer-events:none'>🔍</span>" : '';
-                if ($stav === 'full')         echo "<td{$click}><span class='rs-kal-busy'>✕</span>{$lupa}</td>";
-                elseif ($stav === 'partial')  echo "<td{$click}><span class='rs-kal-partial'>●</span>{$lupa}</td>";
+                $hod   = !empty($pending[$tid][$d]) ? "<span style='position:absolute;bottom:1px;right:2px;font-size:8px;line-height:1;pointer-events:none;opacity:.8'>⏳</span>" : '';
+                if ($stav === 'full')         echo "<td{$click}><span class='rs-kal-busy'>✕</span>{$hod}{$lupa}</td>";
+                elseif ($stav === 'partial')  echo "<td{$click}><span class='rs-kal-partial'>●</span>{$hod}{$lupa}</td>";
                 else                         echo "<td><span class='rs-kal-free'>✓</span></td>";
             }
             echo "</tr>";
@@ -2159,6 +2164,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span><span class='rs-kal-free' style='font-size:11px;width:18px;height:18px;line-height:18px'>✓</span> Volno</span>";
         echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
+        echo "<span>⏳ Čeká na schválení</span>";
         echo "</div>";
         $btn_href = $form_url ? esc_url($form_url) : '#';
         echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat prostory</a></div>";
@@ -2264,8 +2270,10 @@ function rs_kalendar_sc(array $atts): string {
         document.getElementById('rs-kal-modal-title').textContent = title;
         var html = '';
         items.forEach(function(r, i) {
+            var stavText  = r.stav === 'cekajici' ? '⏳ čeká na schválení' : 'obsazeno';
+            var stavColor = r.stav === 'cekajici' ? '#b06000' : '#c0392b';
             html += '<div style="border:1px solid #e0e0e0;border-radius:4px;padding:12px;margin-bottom:10px">';
-            html += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">🕐 ' + r.od + ' – ' + r.do + ' <span style="font-weight:normal;color:#c0392b">obsazeno</span></div>';
+            html += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">🕐 ' + r.od + ' – ' + r.do + ' <span style="font-weight:normal;color:' + stavColor + '">' + stavText + '</span></div>';
             if (rsKalPriv) {
                 if (r.nazev)       html += '<div style="margin-bottom:3px"><strong>Název:</strong> ' + escHtml(r.nazev) + '</div>';
                 if (r.rezervujici) html += '<div style="margin-bottom:3px"><strong>Rezervující:</strong> ' + escHtml(r.rezervujici) + '</div>';
@@ -2573,14 +2581,18 @@ function rs_formular_sc(): string {
             .then(function(r){return r.json();})
             .then(function(d){
                 if(!d.success||d.data===null){el.innerHTML='';return;}
-                el.innerHTML = d.data.volno
-                    ? '<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>'
-                    : '<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+                if(d.data.volno){
+                    el.innerHTML='<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>';
+                    document.querySelectorAll('.rs-alert').forEach(function(a){a.style.display='none';});
+                } else {
+                    el.innerHTML='<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+                }
             }).catch(function(){el.innerHTML='';});
         }, 400);
     }
-    <?php if ($old_prostor): ?>
     document.addEventListener('DOMContentLoaded', function(){
+        rsRezTypChange('<?php echo esc_js($old_typ); ?>');
+        <?php if ($old_prostor): ?>
         rsExtProstorChange(<?php echo $old_prostor; ?>);
         var oldSegs = <?php echo json_encode($old_segs); ?>;
         setTimeout(function(){
@@ -2590,8 +2602,8 @@ function rs_formular_sc(): string {
             });
             rsCheckVolno();
         }, 100);
+        <?php endif; ?>
     });
-    <?php endif; ?>
     function rsAresLoad(){
         var ico=document.getElementById('rs-ico').value.replace(/\D/g,'');
         if(ico.length<7){alert('Zadejte IČO');return;}
@@ -2703,7 +2715,7 @@ function rs_render_sprava_rezervace(): string {
 
     $zprava = '';
 
-    // Zrušení
+    // Zpracování POST akcí
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_sprava_action'])) {
         if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_sprava_' . $token)) {
             $zprava = rs_alert('Neplatný token.','error');
@@ -2714,6 +2726,20 @@ function rs_render_sprava_rezervace(): string {
                 rs_notifikuj_zruseni($rid);
                 $stav   = 'zrusena';
                 $zprava = rs_alert('Rezervace byla zrušena.');
+            } elseif ($action === 'upravit_kontakt' && $stav !== 'zrusena') {
+                $r_typ = get_post_meta($rid,'rs_rez_typ',true);
+                update_post_meta($rid,'rs_pocet_lidi',(int)($_POST['pocet_lidi'] ?? 1));
+                update_post_meta($rid,'rs_mobil',sanitize_text_field($_POST['mobil'] ?? ''));
+                update_post_meta($rid,'rs_email',sanitize_email($_POST['email'] ?? ''));
+                if ($r_typ === 'pravnicka') {
+                    update_post_meta($rid,'rs_kontakt_jmeno',sanitize_text_field($_POST['kontakt_jmeno'] ?? ''));
+                } else {
+                    update_post_meta($rid,'rs_jmeno',sanitize_text_field($_POST['jmeno'] ?? ''));
+                    update_post_meta($rid,'rs_prijmeni',sanitize_text_field($_POST['prijmeni'] ?? ''));
+                    update_post_meta($rid,'rs_datum_narozeni',sanitize_text_field($_POST['datum_narozeni'] ?? ''));
+                    update_post_meta($rid,'rs_bydliste',sanitize_text_field($_POST['bydliste'] ?? ''));
+                }
+                $zprava = rs_alert('Údaje byly uloženy.');
             } elseif ($action === 'ulozit_ucastniky') {
                 $ucast = rs_uloz_ucastniky($rid);
                 if (is_array($ucast) && !empty($ucast)) {
@@ -2741,11 +2767,10 @@ function rs_render_sprava_rezervace(): string {
 
     echo "<div class='rs-card'>";
     echo "<h4 class='rs-card-title'>" . esc_html(get_the_title($pid)) . " – " . rs_stav_badge($stav) . "</h4>";
+    $r_typ = get_post_meta($rid,'rs_rez_typ',true);
     echo "<table class='rs-table' style='max-width:500px'>";
-    echo "<tr><th style='width:140px'>Prostor</th><td>" . esc_html(get_the_title($pid));
-    if ($segs) echo " (" . implode(', ', array_map('get_the_title', $segs)) . ")";
-    echo "</td></tr>";
-    echo "<tr><th>Termín</th><td>" . esc_html($od) . " – " . esc_html($do_) . "</td></tr>";
+    echo "<tr><th style='width:140px'>Prostor</th><td>" . esc_html(rs_prostor_label($pid, array_filter($segs))) . "</td></tr>";
+    echo "<tr><th>Termín</th><td>" . esc_html(rs_format_datum($od)) . " – " . esc_html(rs_format_datum($do_)) . "</td></tr>";
     echo "<tr><th>Počet osob</th><td>" . $pocet . "</td></tr>";
     echo "<tr><th>Stav</th><td>" . rs_stav_badge($stav) . "</td></tr>";
     if ($cena > 0) echo "<tr><th>Cena</th><td>" . number_format($cena,0,'.',' ') . " Kč</td></tr>";
@@ -2758,6 +2783,28 @@ function rs_render_sprava_rezervace(): string {
         echo "<button type='submit' class='rs-btn rs-btn-danger'>Zrušit rezervaci</button></form>";
     }
     echo "</div>";
+
+    // Upravit kontaktní údaje
+    if ($stav !== 'zrusena') {
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Upravit kontaktní údaje</h4>";
+        echo "<form method='post'>" . wp_nonce_field('rs_sprava_' . $token,'_wpnonce',true,false);
+        echo "<input type='hidden' name='rs_sprava_action' value='upravit_kontakt'>";
+        echo "<div class='rs-form-row'>";
+        if ($r_typ === 'pravnicka') {
+            echo "<div class='rs-form-group'><label>Kontaktní osoba *</label><input type='text' name='kontakt_jmeno' value='" . esc_attr(get_post_meta($rid,'rs_kontakt_jmeno',true)) . "' required></div>";
+        } else {
+            echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='jmeno' value='" . esc_attr(get_post_meta($rid,'rs_jmeno',true)) . "' required></div>";
+            echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='prijmeni' value='" . esc_attr(get_post_meta($rid,'rs_prijmeni',true)) . "' required></div>";
+            echo "<div class='rs-form-group'><label>Datum narození</label><input type='date' name='datum_narozeni' value='" . esc_attr(get_post_meta($rid,'rs_datum_narozeni',true)) . "'></div>";
+            echo "<div class='rs-form-group'><label>Bydliště</label><input type='text' name='bydliste' value='" . esc_attr(get_post_meta($rid,'rs_bydliste',true)) . "'></div>";
+        }
+        echo "<div class='rs-form-group'><label>Mobil *</label><input type='tel' name='mobil' value='" . esc_attr(get_post_meta($rid,'rs_mobil',true)) . "' required></div>";
+        echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='email' value='" . esc_attr(get_post_meta($rid,'rs_email',true)) . "' required></div>";
+        echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='pocet_lidi' min='1' value='" . esc_attr((string)$pocet) . "' required style='max-width:100px'></div>";
+        echo "</div>";
+        echo "<button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit změny</button>";
+        echo "</form></div>";
+    }
 
     // Formulář pro seznam ubytovaných (vzdušné)
     if (get_option('rs_vzdusne_aktivni') === '1' && $stav === 'potvrzena') {
