@@ -1894,7 +1894,6 @@ function rs_kalendar_sc(array $atts): string {
     echo "</form>";
     echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
     echo "</div>";
-    echo "<h2 style='color:#1a5c2a;margin:0 0 20px;font-size:1.4em;font-weight:600'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</h2>";
 
     foreach ($prostory as $p) {
         echo "<div style='margin-bottom:28px'>";
@@ -1942,6 +1941,7 @@ function rs_kalendar_sc(array $atts): string {
             echo "</div>";
         }
 
+        echo "<p style='font-weight:600;color:#1a5c2a;margin:0 0 6px'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</p>";
         echo "<div style='overflow-x:auto'>";
         echo "<table class='rs-kal-table'><thead><tr><th>Prostor/Segment</th>";
         for ($d = 1; $d <= $days_in_month; $d++) {
