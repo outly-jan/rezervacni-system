@@ -174,16 +174,30 @@ function rs_mail(string $to, string $subj, string $body) {
     wp_mail($to, $subj, $body, ['Content-Type: text/plain; charset=UTF-8']);
 }
 
+function rs_format_datum(string $d): string {
+    $ts = strtotime($d);
+    if (!$ts) return $d;
+    $t = date('H:i', $ts);
+    return date('j. n. Y', $ts) . ($t === '00:00' || $t === '23:59' ? '' : ' v ' . $t);
+}
+
+function rs_sprava_url(string $token): string {
+    $base = get_option('rs_formular_url', '') ?: home_url('/');
+    return add_query_arg('rs_sprava', $token, rtrim($base, '/') . '/');
+}
+
+define('RS_PODPIS', "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černého havrana");
+
 function rs_notifikuj_nova(int $id) {
     $email   = get_post_meta($id, 'rs_email', true);
-    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
-    $od      = get_post_meta($id, 'rs_datum_od', true);
-    $do_     = get_post_meta($id, 'rs_datum_do', true);
+    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
+    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
     $token   = get_post_meta($id, 'rs_token', true);
-    $url     = home_url('/?rs_sprava=' . $token);
+    $url     = rs_sprava_url($token);
 
     if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$prostor}",
-        "Dobrý den,\n\nVaše žádost o rezervaci prostory {$prostor} (termín: {$od} – {$do_}) byla přijata a čeká na schválení.\n\nOdkaz pro správu rezervace (uschovejte si jej):\n{$url}\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$prostor} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . RS_PODPIS);
 
     foreach (rs_spravci_emaily() as $se)
         rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
@@ -193,19 +207,23 @@ function rs_notifikuj_nova(int $id) {
 function rs_notifikuj_potvrzeni(int $id) {
     $email = get_post_meta($id, 'rs_email', true);
     if (!$email) return;
-    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
+    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
     $cena    = (float)get_post_meta($id, 'rs_cena_celkem', true);
     $token   = get_post_meta($id, 'rs_token', true);
     rs_mail($email, "Rezervace potvrzena – {$prostor}",
-        "Dobrý den,\n\nVaše rezervace prostory {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena,0,',',' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\nvaše rezervace prostory {$prostor} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
 }
 
 function rs_notifikuj_zruseni(int $id) {
     $email = get_post_meta($id, 'rs_email', true);
     if (!$email) return;
-    $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+    $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
+    $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_     = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
     rs_mail($email, "Rezervace zrušena – {$prostor}",
-        "Dobrý den,\n\nVaše rezervace prostory {$prostor} na termín " . get_post_meta($id,'rs_datum_od',true) . " – " . get_post_meta($id,'rs_datum_do',true) . " byla zrušena.\n\nSkautské středisko Chlumec");
+        "Dobrý den,\n\nvaše rezervace prostory {$prostor} na termín {$od} – {$do_} byla zrušena.\n\n" . RS_PODPIS);
 }
 
 // Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
@@ -222,10 +240,11 @@ function rs_cron_upozorneni_ucastnici() {
         $diff   = $od_ts - time();
         $days   = (int)($diff / 86400);
         if ($days !== 7 && $days !== 1) continue;
-        $prostor = get_the_title((int)get_post_meta($id, 'rs_prostor_id', true));
+        $prostor = html_entity_decode(get_the_title((int)get_post_meta($id, 'rs_prostor_id', true)), ENT_QUOTES | ENT_HTML5);
+        $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
         $token   = get_post_meta($id, 'rs_token', true);
         rs_mail($email, "Upozornění: vyplňte seznam ubytovaných – {$prostor}",
-            "Dobrý den,\n\nVaše rezervace prostory {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . ".\n\nProsím vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . home_url('/?rs_sprava=' . $token) . "\n\nSkautské středisko Chlumec");
+            "Dobrý den,\n\nvaše rezervace prostory {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . " ({$od}).\n\nProsíme vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
     }
 }
 
