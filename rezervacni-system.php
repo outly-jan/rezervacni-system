@@ -1535,8 +1535,8 @@ function rs_sekce_interni(): string {
     // 4a) Panel: Jednorázová
     echo "<div id='rs-int-panel-jedno'>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od'></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900'></div>";
     echo "</div>";
     echo "</div>";
 
@@ -1547,8 +1547,8 @@ function rs_sekce_interni(): string {
     foreach ($dny as $k => $v) echo "<option value='{$k}'>{$v}</option>";
     echo "</select></div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
-    echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
+    echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do' step='900'></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Opakovat od *</label><input type='date' name='int_opakovani_od'></div>";
@@ -1667,6 +1667,7 @@ function rs_interni_zpracuj(string $action): string {
             $od  = str_replace('T',' ',$od) . ':00';
             $do_ = str_replace('T',' ',$do_) . ':00';
             if (strtotime($od) >= strtotime($do_)) return rs_alert('Datum konce musí být po datu začátku.','error');
+            if ((int)date('i',strtotime($od)) % 15 !== 0 || (int)date('i',strtotime($do_)) % 15 !== 0) return rs_alert('Čas musí být zadán v celých čtvrthodinách (0, 15, 30 nebo 45 minut).','error');
             if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
             $stav = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
             $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
@@ -2312,8 +2313,8 @@ function rs_formular_sc(): string {
     echo "<div id='rs-ext-seg-wrap' style='display:none' class='rs-form-group'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-ext-seg-list'></div></div>";
 
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' required></div>";
-    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' required></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900' required></div>";
     echo "</div>";
     echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet' value='1' min='1' max='500' required style='width:100px'></div>";
 
@@ -2397,6 +2398,7 @@ function rs_zpracuj_externi_formular() {
     $datum_od = str_replace('T',' ',$datum_od) . ':00';
     $datum_do = str_replace('T',' ',$datum_do) . ':00';
     if (strtotime($datum_od) >= strtotime($datum_do)) return rs_alert('Datum konce musí být po datu začátku.','error');
+    if ((int)date('i',strtotime($datum_od)) % 15 !== 0 || (int)date('i',strtotime($datum_do)) % 15 !== 0) return rs_alert('Čas musí být zadán v celých čtvrthodinách (0, 15, 30 nebo 45 minut).','error');
     if (!rs_je_volno($prostor_id,$seg_ids,$datum_od,$datum_do)) return rs_alert('Zvolený termín bohužel není volný. Vyberte prosím jiný termín.','error');
 
     $token = rs_token();
