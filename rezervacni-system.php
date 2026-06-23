@@ -1887,8 +1887,16 @@ function rs_kalendar_sc(array $atts): string {
         $form_url = $form_row ? get_permalink($form_row->ID) : '';
     }
 
-    foreach ($prostory as $p) {
-        echo "<div style='margin-bottom:28px'>";
+    // Tab bar
+    echo "<div style='display:flex;flex-wrap:wrap;gap:0;border-bottom:2px solid #1a5c2a;margin-bottom:0'>";
+    foreach ($prostory as $i => $p) {
+        $a = ($i === 0);
+        echo "<button data-rs-tab='" . (int)$p->ID . "' onclick='rsTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid " . ($a ? '#1a5c2a' : '#c8deca') . ";border-bottom:none;background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . "'>" . esc_html($p->post_title) . "</button>";
+    }
+    echo "</div>";
+
+    foreach ($prostory as $i => $p) {
+        echo "<div id='rs-kal-panel-" . (int)$p->ID . "' data-rs-tab-panel style='padding-top:16px;margin-bottom:28px" . ($i > 0 ? ";display:none" : "") . "'>";
         echo "<h4 style='color:#1a5c2a;margin-bottom:8px'>" . esc_html($p->post_title) . "</h4>";
         $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
 
@@ -2116,6 +2124,17 @@ function rs_kalendar_sc(array $atts): string {
         var modal = document.getElementById('rs-kal-modal');
         modal.style.display = 'flex';
         modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
+    }
+    function rsTab(pid) {
+        document.querySelectorAll('[data-rs-tab-panel]').forEach(function(el) { el.style.display = 'none'; });
+        document.querySelectorAll('[data-rs-tab]').forEach(function(btn) {
+            var active = btn.getAttribute('data-rs-tab') == pid;
+            btn.style.background = active ? '#1a5c2a' : '#f4f8f4';
+            btn.style.color      = active ? '#fff'    : '#1a5c2a';
+            btn.style.borderColor = active ? '#1a5c2a' : '#c8deca';
+        });
+        var panel = document.getElementById('rs-kal-panel-' + pid);
+        if (panel) panel.style.display = '';
     }
     function rsKalScrollDir(btn, dir) {
         var wrap = btn.closest('[data-rs-scroll-wrap]');
