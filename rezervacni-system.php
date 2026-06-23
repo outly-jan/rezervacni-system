@@ -2784,9 +2784,9 @@ function rs_render_sprava_rezervace(): string {
     }
     echo "</div>";
 
-    // Upravit kontaktní údaje
+    // Upravit rezervaci
     if ($stav !== 'zrusena') {
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Upravit kontaktní údaje</h4>";
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Upravit rezervaci</h4>";
         echo "<form method='post'>" . wp_nonce_field('rs_sprava_' . $token,'_wpnonce',true,false);
         echo "<input type='hidden' name='rs_sprava_action' value='upravit_kontakt'>";
         echo "<div class='rs-form-row'>";
