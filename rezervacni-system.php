@@ -1826,6 +1826,43 @@ function rs_kalendar_sc(array $atts): string {
     $mesice_gen = ['','ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
     $dny_zkr    = ['','Po','Út','St','Čt','Pá','So','Ne'];
 
+    // Sestavit data segmentů pro JS modal + foto výpis
+    $rsSegData = [];
+    $fmt_c = fn(float $v): string => number_format($v, 0, ',', ' ');
+    foreach ($prostory as $p) {
+        $is_seg_p = rs_ma_segmenty($p->ID);
+        $p_items  = $is_seg_p ? rs_get_segmenty($p->ID) : [];
+        if (!$is_seg_p) continue; // Segmenty nemají detail modal (info blok se zobrazí nad tabulkou)
+        $p_rezim  = get_post_meta($p->ID,'rs_ceny_rezim',true) ?: 'celek';
+        foreach ($p_items as $item) {
+            $kap   = (int)get_post_meta($item->ID,'rs_kapacita',true);
+            $roz   = (int)get_post_meta($item->ID,'rs_rozloha',true);
+            $dop   = get_post_meta($item->ID,'rs_doplnujici',true);
+            $popis = trim($item->post_content);
+            $za_os  = (float)get_post_meta($p_rezim === 'segmenty' ? $item->ID : $p->ID,'rs_cena_za_osobu',true);
+            $za_min = (float)get_post_meta($p_rezim === 'segmenty' ? $item->ID : $p->ID,'rs_cena_min',true);
+            if ($za_os > 0 && $za_min > 0)  $cena_s = $fmt_c($za_os) . ' Kč/os., min. ' . $fmt_c($za_min) . ' Kč';
+            elseif ($za_os > 0)              $cena_s = $fmt_c($za_os) . ' Kč/os.';
+            elseif ($za_min > 0)             $cena_s = 'Paušálně ' . $fmt_c($za_min) . ' Kč';
+            else                             $cena_s = '';
+            $fotky_urls = [];
+            foreach ((array)get_post_meta($item->ID,'rs_fotky',true) as $fid) {
+                $u = wp_get_attachment_image_url((int)$fid,'medium');
+                if ($u) $fotky_urls[] = $u;
+            }
+            $rsSegData[$item->ID] = [
+                'title' => $item->post_title,
+                'popis' => $popis,
+                'kap'   => $kap,
+                'roz'   => $roz,
+                'dop'   => $dop,
+                'cena'  => $cena_s,
+                'fotky' => $fotky_urls,
+                'ok'    => (bool)($popis || $kap || $roz || $dop || $cena_s || $fotky_urls),
+            ];
+        }
+    }
+
     $prev_url = add_query_arg(['rs_rok' => $mesic === 1 ? $rok-1 : $rok, 'rs_mesic' => $mesic === 1 ? 12 : $mesic-1]);
     $next_url = add_query_arg(['rs_rok' => $mesic === 12 ? $rok+1 : $rok, 'rs_mesic' => $mesic === 12 ? 1 : $mesic+1]);
 
@@ -1914,7 +1951,10 @@ function rs_kalendar_sc(array $atts): string {
 
         foreach ($items as $item) {
             $tid = $item->ID;
-            echo "<tr><td>" . esc_html($item->post_title) . "</td>";
+            $seg_link = (!empty($rsSegData[$tid]['ok']))
+                ? "<a href='#' onclick='rsSegDetail(" . (int)$tid . ");return false;' style='color:#1a5c2a;text-decoration:underline dotted;cursor:pointer'>" . esc_html($item->post_title) . "</a>"
+                : esc_html($item->post_title);
+            echo "<tr><td>{$seg_link}</td>";
             for ($d = 1; $d <= $days_in_month; $d++) {
                 $stav = $busy[$tid][$d] ?? '';
                 $has_detail = !empty($kal_data[$tid][$d]);
@@ -1927,12 +1967,29 @@ function rs_kalendar_sc(array $atts): string {
         }
         echo "</tbody></table></div>";
 
-        $fotky = (array)get_post_meta($p->ID,'rs_fotky',true);
-        if ($fotky) {
-            echo "<div class='rs-foto-preview' style='margin-top:8px'>";
-            foreach ($fotky as $fid) {
-                $url = wp_get_attachment_image_url((int)$fid,'medium');
-                if ($url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+        // Fotky prostoru
+        $fotky_p = array_filter(array_map(fn($fid) => wp_get_attachment_image_url((int)$fid,'medium'), (array)get_post_meta($p->ID,'rs_fotky',true)));
+        // Fotky segmentů (jen pro prostory se segmenty)
+        $fotky_segs = [];
+        if (rs_ma_segmenty($p->ID)) {
+            foreach ($items as $seg_item) {
+                $seg_urls = array_filter(array_map(fn($fid) => wp_get_attachment_image_url((int)$fid,'medium'), (array)get_post_meta($seg_item->ID,'rs_fotky',true)));
+                if ($seg_urls) $fotky_segs[] = ['title' => $seg_item->post_title, 'urls' => $seg_urls];
+            }
+        }
+        if ($fotky_p || $fotky_segs) {
+            echo "<div style='margin-top:10px'>";
+            if ($fotky_p) {
+                echo "<div class='rs-foto-preview'>";
+                foreach ($fotky_p as $url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+                echo "</div>";
+            }
+            foreach ($fotky_segs as $sg) {
+                echo "<div style='margin-top:8px'>";
+                echo "<p style='font-size:12px;font-weight:600;color:#555;margin:0 0 4px'>" . esc_html($sg['title']) . "</p>";
+                echo "<div class='rs-foto-preview'>";
+                foreach ($sg['urls'] as $url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+                echo "</div></div>";
             }
             echo "</div>";
         }
@@ -1959,11 +2016,36 @@ function rs_kalendar_sc(array $atts): string {
     // JS: detail dat + modal
     $is_priv_js = $is_privileged ? 'true' : 'false';
     $kal_json   = wp_json_encode($kal_data);
+    $seg_json   = wp_json_encode($rsSegData);
     ?>
     <script>
     var rsKalData = <?php echo $kal_json; ?>;
     var rsKalPriv = <?php echo $is_priv_js; ?>;
+    var rsSegData = <?php echo $seg_json; ?>;
     var rsKalMesiceGen = ['','ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
+    function rsSegDetail(sid) {
+        var seg = rsSegData[sid];
+        if (!seg) return;
+        document.getElementById('rs-kal-modal-title').textContent = seg.title;
+        var html = '';
+        if (seg.popis) html += '<p style="margin:0 0 10px">' + escHtml(seg.popis) + '</p>';
+        var chips = [];
+        if (seg.kap) chips.push('🛏 <strong>' + seg.kap + ' míst</strong> na spaní <span style="color:#888">(přibližně)</span>');
+        if (seg.roz) chips.push('📐 <strong>' + seg.roz + ' m²</strong> <span style="color:#888">(místnosti ke spaní)</span>');
+        if (seg.cena) chips.push('💰 ' + escHtml(seg.cena));
+        if (chips.length) html += '<div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:10px">' + chips.map(function(c){ return '<span>' + c + '</span>'; }).join('') + '</div>';
+        if (seg.dop) html += '<p style="margin:0 0 10px;color:#555">' + escHtml(seg.dop) + '</p>';
+        if (seg.fotky && seg.fotky.length) {
+            html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
+            seg.fotky.forEach(function(u){ html += '<img src="' + escHtml(u) + '" style="width:130px;height:98px;object-fit:cover;border-radius:3px;border:1px solid #ddd">'; });
+            html += '</div>';
+        }
+        if (!html) html = '<p style="color:#777">Žádné detaily k zobrazení.</p>';
+        document.getElementById('rs-kal-modal-body').innerHTML = html;
+        var modal = document.getElementById('rs-kal-modal');
+        modal.style.display = 'flex';
+        modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
+    }
     function rsKalDetail(tid, den, nazevProstoru, rok, mesic) {
         var items = (rsKalData[tid] && rsKalData[tid][den]) ? rsKalData[tid][den] : [];
         var title = den + '. ' + rsKalMesiceGen[mesic] + ' ' + rok + ' – ' + nazevProstoru;
