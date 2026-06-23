@@ -1847,8 +1847,9 @@ function rs_kalendar_sc(array $atts): string {
             else                             $cena_s = '';
             $fotky_urls = [];
             foreach ((array)get_post_meta($item->ID,'rs_fotky',true) as $fid) {
-                $u = wp_get_attachment_image_url((int)$fid,'medium');
-                if ($u) $fotky_urls[] = $u;
+                $thumb = wp_get_attachment_image_url((int)$fid,'medium');
+                $full  = wp_get_attachment_url((int)$fid) ?: $thumb;
+                if ($thumb) $fotky_urls[] = ['thumb' => $thumb, 'full' => $full];
             }
             $rsSegData[$item->ID] = [
                 'title' => $item->post_title,
@@ -1973,28 +1974,38 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "</div>";
 
-        // Fotky prostoru
-        $fotky_p = array_filter(array_map(fn($fid) => wp_get_attachment_image_url((int)$fid,'medium'), (array)get_post_meta($p->ID,'rs_fotky',true)));
-        // Fotky segmentů (jen pro prostory se segmenty)
+        // Fotky prostoru a segmentů s lightbox podporou
+        $fotky_p = [];
+        foreach ((array)get_post_meta($p->ID,'rs_fotky',true) as $fid) {
+            $thumb = wp_get_attachment_image_url((int)$fid,'medium');
+            $full  = wp_get_attachment_url((int)$fid) ?: $thumb;
+            if ($thumb) $fotky_p[] = ['thumb' => $thumb, 'full' => $full];
+        }
         $fotky_segs = [];
         if (rs_ma_segmenty($p->ID)) {
             foreach ($items as $seg_item) {
-                $seg_urls = array_filter(array_map(fn($fid) => wp_get_attachment_image_url((int)$fid,'medium'), (array)get_post_meta($seg_item->ID,'rs_fotky',true)));
-                if ($seg_urls) $fotky_segs[] = ['title' => $seg_item->post_title, 'urls' => $seg_urls];
+                $seg_imgs = [];
+                foreach ((array)get_post_meta($seg_item->ID,'rs_fotky',true) as $fid) {
+                    $thumb = wp_get_attachment_image_url((int)$fid,'medium');
+                    $full  = wp_get_attachment_url((int)$fid) ?: $thumb;
+                    if ($thumb) $seg_imgs[] = ['thumb' => $thumb, 'full' => $full];
+                }
+                if ($seg_imgs) $fotky_segs[] = ['title' => $seg_item->post_title, 'gal' => 'gal-s-' . $seg_item->ID, 'imgs' => $seg_imgs];
             }
         }
         if ($fotky_p || $fotky_segs) {
             echo "<div style='margin-top:10px'>";
             if ($fotky_p) {
+                $gal_p = 'gal-p-' . $p->ID;
                 echo "<div class='rs-foto-preview'>";
-                foreach ($fotky_p as $url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+                foreach ($fotky_p as $f) echo "<img src='" . esc_url($f['thumb']) . "' data-full='" . esc_attr($f['full']) . "' data-gallery='" . esc_attr($gal_p) . "' data-caption='' onclick='rsLightbox(this)' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer'>";
                 echo "</div>";
             }
             foreach ($fotky_segs as $sg) {
                 echo "<div style='margin-top:8px'>";
                 echo "<p style='font-size:12px;font-weight:600;color:#555;margin:0 0 4px'>" . esc_html($sg['title']) . "</p>";
                 echo "<div class='rs-foto-preview'>";
-                foreach ($sg['urls'] as $url) echo "<img src='" . esc_url($url) . "' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd'>";
+                foreach ($sg['imgs'] as $f) echo "<img src='" . esc_url($f['thumb']) . "' data-full='" . esc_attr($f['full']) . "' data-gallery='" . esc_attr($sg['gal']) . "' data-caption='' onclick='rsLightbox(this)' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer'>";
                 echo "</div></div>";
             }
             echo "</div>";
@@ -2012,6 +2023,16 @@ function rs_kalendar_sc(array $atts): string {
     echo "<h4 id='rs-kal-modal-title' style='margin:0 0 16px;color:#1a5c2a'></h4>";
     echo "<div id='rs-kal-modal-body'></div>";
     echo "</div></div>";
+
+    // Lightbox overlay
+    echo "<div id='rs-lb' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:199999;align-items:center;justify-content:center;flex-direction:column'>";
+    echo "<button onclick='rsLbClose()' style='position:absolute;top:14px;right:18px;background:none;border:none;color:#fff;font-size:30px;cursor:pointer;line-height:1;padding:4px'>✕</button>";
+    echo "<button id='rs-lb-prev' onclick='rsLbPrev()' style='position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:32px;cursor:pointer;padding:10px 16px;border-radius:4px;line-height:1'>&#8249;</button>";
+    echo "<img id='rs-lb-img' src='' alt='' style='max-width:90vw;max-height:80vh;object-fit:contain;border-radius:3px;display:block'>";
+    echo "<div id='rs-lb-cap' style='color:#eee;margin-top:10px;font-size:13px;text-align:center;max-width:80vw;display:none'></div>";
+    echo "<div id='rs-lb-ctr' style='color:#aaa;margin-top:4px;font-size:12px'></div>";
+    echo "<button id='rs-lb-next' onclick='rsLbNext()' style='position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:32px;cursor:pointer;padding:10px 16px;border-radius:4px;line-height:1'>&#8250;</button>";
+    echo "</div>";
 
     // JS: detail dat + modal
     $is_priv_js = $is_privileged ? 'true' : 'false';
@@ -2037,7 +2058,9 @@ function rs_kalendar_sc(array $atts): string {
         if (seg.dop) html += '<p style="margin:0 0 10px;color:#555">' + escHtml(seg.dop) + '</p>';
         if (seg.fotky && seg.fotky.length) {
             html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
-            seg.fotky.forEach(function(u){ html += '<img src="' + escHtml(u) + '" style="width:130px;height:98px;object-fit:cover;border-radius:3px;border:1px solid #ddd">'; });
+            seg.fotky.forEach(function(f, i) {
+                html += '<img src="' + escHtml(f.thumb) + '" data-full="' + escHtml(f.full) + '" data-gallery="seg-' + sid + '" data-caption="" onclick="rsLightbox(this)" style="width:130px;height:98px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer">';
+            });
             html += '</div>';
         }
         if (!html) html = '<p style="color:#777">Žádné detaily k zobrazení.</p>';
@@ -2071,6 +2094,40 @@ function rs_kalendar_sc(array $atts): string {
         modal.style.display = 'flex';
         modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
     }
+    var rsLbGallery = [], rsLbIdx = 0;
+    function rsLightbox(el) {
+        var gallery = el.getAttribute('data-gallery');
+        var imgs = document.querySelectorAll('[data-gallery="' + gallery + '"]');
+        rsLbGallery = [];
+        imgs.forEach(function(img) {
+            rsLbGallery.push({ full: img.getAttribute('data-full'), cap: img.getAttribute('data-caption') || '' });
+        });
+        rsLbIdx = Array.from(imgs).indexOf(el);
+        rsLbShow();
+    }
+    function rsLbFromArray(arr, idx) { rsLbGallery = arr; rsLbIdx = idx; rsLbShow(); }
+    function rsLbShow() {
+        var item = rsLbGallery[rsLbIdx];
+        document.getElementById('rs-lb-img').src = item.full;
+        var cap = document.getElementById('rs-lb-cap');
+        cap.textContent = item.cap;
+        cap.style.display = item.cap ? '' : 'none';
+        document.getElementById('rs-lb-ctr').textContent = (rsLbIdx + 1) + ' / ' + rsLbGallery.length;
+        document.getElementById('rs-lb-prev').style.display = rsLbGallery.length > 1 ? '' : 'none';
+        document.getElementById('rs-lb-next').style.display = rsLbGallery.length > 1 ? '' : 'none';
+        var lb = document.getElementById('rs-lb');
+        lb.style.display = 'flex';
+        lb.onclick = function(e) { if (e.target === this) rsLbClose(); };
+    }
+    function rsLbClose() { document.getElementById('rs-lb').style.display = 'none'; }
+    function rsLbPrev() { rsLbIdx = (rsLbIdx - 1 + rsLbGallery.length) % rsLbGallery.length; rsLbShow(); }
+    function rsLbNext() { rsLbIdx = (rsLbIdx + 1) % rsLbGallery.length; rsLbShow(); }
+    document.addEventListener('keydown', function(e) {
+        if (document.getElementById('rs-lb').style.display === 'none') return;
+        if (e.key === 'Escape') rsLbClose();
+        if (e.key === 'ArrowLeft') rsLbPrev();
+        if (e.key === 'ArrowRight') rsLbNext();
+    });
     function escHtml(s){ var d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; }
     </script>
     <?php
