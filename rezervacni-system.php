@@ -1535,10 +1535,14 @@ function rs_sekce_interni(): string {
     // 4a) Panel: Jednorázová
     echo "<div id='rs-int-panel-jedno'>";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='int_cely_den' onchange='rsCelyDen(this,\"int\")' style='width:auto'> Celý den</label></div>";
-    echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label id='rs-int-lbl-od'>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900'></div>";
-    echo "<div class='rs-form-group'><label id='rs-int-lbl-do'>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900'></div>";
-    echo "</div>";
+    echo "<div id='rs-int-cas-wrap'><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900'></div>";
+    echo "</div></div>";
+    echo "<div id='rs-int-den-wrap' style='display:none'><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='int_datum_do_den'></div>";
+    echo "</div></div>";
     echo "</div>";
 
     // 4b) Panel: Opakující se (skrytý)
@@ -1662,16 +1666,18 @@ function rs_interni_zpracuj(string $action): string {
 
         if ($mode === 'jednorazova') {
             $pocet = 0;
-            $od  = sanitize_text_field($_POST['int_datum_od'] ?? '');
-            $do_ = sanitize_text_field($_POST['int_datum_do'] ?? '');
-            if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
             if (!empty($_POST['int_cely_den'])) {
-                $od  = $od  . ' 00:00:00';
-                $do_ = $do_ . ' 23:59:00';
+                $den_od = sanitize_text_field($_POST['int_datum_od_den'] ?? '');
+                $den_do = sanitize_text_field($_POST['int_datum_do_den'] ?? '');
+                $od  = $den_od ? $den_od . ' 00:00:00' : '';
+                $do_ = $den_do ? $den_do . ' 23:59:00' : '';
             } else {
-                $od  = str_replace('T',' ',$od) . ':00';
-                $do_ = str_replace('T',' ',$do_) . ':00';
+                $od  = sanitize_text_field($_POST['int_datum_od'] ?? '');
+                $do_ = sanitize_text_field($_POST['int_datum_do'] ?? '');
+                $od  = $od  ? str_replace('T',' ',$od)  . ':00' : '';
+                $do_ = $do_ ? str_replace('T',' ',$do_) . ':00' : '';
             }
+            if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
             if (strtotime($od) >= strtotime($do_)) return rs_alert('Datum konce musí být po datu začátku.','error');
             if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
             $stav = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
@@ -2145,25 +2151,24 @@ function rs_kalendar_sc(array $atts): string {
         modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
     }
     function rsCelyDen(cb, prefix) {
-        var od  = document.querySelector('[name=' + prefix + '_datum_od]');
-        var dod = document.querySelector('[name=' + prefix + '_datum_do]');
-        var lblOd  = document.getElementById('rs-' + prefix + '-lbl-od');
-        var lblDo  = document.getElementById('rs-' + prefix + '-lbl-do');
-        var dateOd = od.value  ? (od.value.includes('T')  ? od.value.split('T')[0]  : od.value)  : '';
-        var dateDo = dod.value ? (dod.value.includes('T') ? dod.value.split('T')[0] : dod.value) : '';
+        var casWrap = document.getElementById('rs-' + prefix + '-cas-wrap');
+        var denWrap = document.getElementById('rs-' + prefix + '-den-wrap');
+        if (!casWrap || !denWrap) return;
+        var dtOd = casWrap.querySelector('[name=' + prefix + '_datum_od]');
+        var dtDo = casWrap.querySelector('[name=' + prefix + '_datum_do]');
+        var dOd  = denWrap.querySelector('[name=' + prefix + '_datum_od_den]');
+        var dDo  = denWrap.querySelector('[name=' + prefix + '_datum_do_den]');
         if (cb.checked) {
-            od.type = 'date';  od.removeAttribute('step');
-            dod.type = 'date'; dod.removeAttribute('step');
-            if (lblOd) lblOd.textContent = 'Datum od *';
-            if (lblDo) lblDo.textContent = 'Datum do *';
+            if (dtOd && dtOd.value) dOd.value = dtOd.value.split('T')[0];
+            if (dtDo && dtDo.value) dDo.value = dtDo.value.split('T')[0];
+            casWrap.style.display = 'none';
+            denWrap.style.display = '';
         } else {
-            od.type = 'datetime-local';  od.step = '900';
-            dod.type = 'datetime-local'; dod.step = '900';
-            if (lblOd) lblOd.textContent = (prefix === 'ext' ? 'Datum a čas od *' : 'Datum od *');
-            if (lblDo) lblDo.textContent = (prefix === 'ext' ? 'Datum a čas do *' : 'Datum do *');
+            if (dOd && dOd.value) dtOd.value = dOd.value + 'T00:00';
+            if (dDo && dDo.value) dtDo.value = dDo.value + 'T00:00';
+            casWrap.style.display = '';
+            denWrap.style.display = 'none';
         }
-        if (dateOd) od.value  = cb.checked ? dateOd : dateOd + 'T00:00';
-        if (dateDo) dod.value = cb.checked ? dateDo : dateDo + 'T00:00';
     }
     function rsKalNav(sel) {
         var data = new URLSearchParams(new FormData(sel.form));
@@ -2339,10 +2344,14 @@ function rs_formular_sc(): string {
     echo "<div id='rs-ext-seg-wrap' style='display:none' class='rs-form-group'><label>Segmenty (nevyberte nic = celý prostor)</label><div id='rs-ext-seg-list'></div></div>";
 
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='ext_cely_den' onchange='rsCelyDen(this,\"ext\")' style='width:auto'> Celý den</label></div>";
-    echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label id='rs-ext-lbl-od'>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required></div>";
-    echo "<div class='rs-form-group'><label id='rs-ext-lbl-do'>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900' required></div>";
-    echo "</div>";
+    echo "<div id='rs-ext-cas-wrap'><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900' required></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900' required></div>";
+    echo "</div></div>";
+    echo "<div id='rs-ext-den-wrap' style='display:none'><div class='rs-form-row'>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='ext_datum_do_den'></div>";
+    echo "</div></div>";
     echo "<div class='rs-form-group'><label>Počet osob *</label><input type='number' name='ext_pocet' value='1' min='1' max='500' required style='width:100px'></div>";
 
     if (get_option('rs_vzdusne_aktivni') === '1') {
@@ -2416,19 +2425,20 @@ function rs_zpracuj_externi_formular() {
     $rez_typ    = sanitize_key($_POST['rez_typ'] ?? 'fyzicka');
     $prostor_id = (int)($_POST['ext_prostor_id'] ?? 0);
     $seg_ids    = array_map('intval',(array)($_POST['ext_segmenty'] ?? []));
-    $datum_od   = sanitize_text_field($_POST['ext_datum_od'] ?? '');
-    $datum_do   = sanitize_text_field($_POST['ext_datum_do'] ?? '');
     $pocet      = max(1,(int)($_POST['ext_pocet'] ?? 1));
     $poznamka   = sanitize_textarea_field($_POST['ext_poznamka'] ?? '');
-
-    if (!$prostor_id || !$datum_od || !$datum_do) return rs_alert('Vyplňte prosím všechna povinná pole.','error');
     if (!empty($_POST['ext_cely_den'])) {
-        $datum_od = $datum_od . ' 00:00:00';
-        $datum_do = $datum_do . ' 23:59:00';
+        $den_od   = sanitize_text_field($_POST['ext_datum_od_den'] ?? '');
+        $den_do   = sanitize_text_field($_POST['ext_datum_do_den'] ?? '');
+        $datum_od = $den_od ? $den_od . ' 00:00:00' : '';
+        $datum_do = $den_do ? $den_do . ' 23:59:00' : '';
     } else {
-        $datum_od = str_replace('T',' ',$datum_od) . ':00';
-        $datum_do = str_replace('T',' ',$datum_do) . ':00';
+        $raw_od   = sanitize_text_field($_POST['ext_datum_od'] ?? '');
+        $raw_do   = sanitize_text_field($_POST['ext_datum_do'] ?? '');
+        $datum_od = $raw_od ? str_replace('T',' ',$raw_od) . ':00' : '';
+        $datum_do = $raw_do ? str_replace('T',' ',$raw_do) . ':00' : '';
     }
+    if (!$prostor_id || !$datum_od || !$datum_do) return rs_alert('Vyplňte prosím všechna povinná pole.','error');
     if (strtotime($datum_od) >= strtotime($datum_do)) return rs_alert('Datum konce musí být po datu začátku.','error');
     if (!rs_je_volno($prostor_id,$seg_ids,$datum_od,$datum_do)) return rs_alert('Zvolený termín bohužel není volný. Vyberte prosím jiný termín.','error');
 
