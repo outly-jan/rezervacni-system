@@ -1961,13 +1961,13 @@ function rs_kalendar_sc(array $atts): string {
         foreach ($_GET as $k => $v)
             if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
                 echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
-        echo "<select name='rs_mesic' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        echo "<select name='rs_mesic' onchange='rsKalNav(this)' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
         for ($m = 1; $m <= 12; $m++) {
             $sel = ($m === $mesic) ? ' selected' : '';
             echo "<option value='{$m}'{$sel}>" . $mesice_cz[$m] . "</option>";
         }
         echo "</select>";
-        echo "<select name='rs_rok' onchange='this.form.submit()' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        echo "<select name='rs_rok' onchange='rsKalNav(this)' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
         for ($y = (int)date('Y') - 2; $y <= (int)date('Y') + 5; $y++) {
             $sel = ($y === $rok) ? ' selected' : '';
             echo "<option value='{$y}'{$sel}>{$y}</option>";
@@ -2137,6 +2137,11 @@ function rs_kalendar_sc(array $atts): string {
         var modal = document.getElementById('rs-kal-modal');
         modal.style.display = 'flex';
         modal.onclick = function(e){ if(e.target===this) this.style.display='none'; };
+    }
+    function rsKalNav(sel) {
+        var data = new URLSearchParams(new FormData(sel.form));
+        data.set(sel.name, sel.value);
+        window.location.href = window.location.pathname + '?' + data.toString() + '#rs-kalendar';
     }
     function rsTab(pid) {
         document.querySelectorAll('[data-rs-tab-panel]').forEach(function(el) { el.style.display = 'none'; });
