@@ -170,8 +170,39 @@ function rs_spravci_emaily(): array {
     return array_unique(array_filter(array_map(fn($u) => $u->user_email, $users)));
 }
 
-function rs_mail(string $to, string $subj, string $body) {
-    wp_mail($to, $subj, $body, ['Content-Type: text/plain; charset=UTF-8']);
+function rs_mail(string $to, string $subj, string $body, string $reply_to = ''): void {
+    $headers = ['Content-Type: text/plain; charset=UTF-8'];
+    if ($reply_to) $headers[] = 'Reply-To: ' . $reply_to;
+    wp_mail($to, $subj, $body, $headers);
+}
+
+function rs_rez_udaje(int $id): string {
+    $typ      = get_post_meta($id, 'rs_rez_typ', true);
+    $pocet    = (int)get_post_meta($id, 'rs_pocet_lidi', true);
+    $poznamka = get_post_meta($id, 'rs_poznamka', true);
+    if ($typ === 'pravnicka') {
+        $lines = [
+            'Organizace:        ' . get_post_meta($id, 'rs_nazev', true),
+            'IČO:               ' . get_post_meta($id, 'rs_ico', true),
+            'Sídlo:             ' . get_post_meta($id, 'rs_sidlo', true),
+            'Kontaktní osoba:   ' . get_post_meta($id, 'rs_kontakt_jmeno', true),
+            'Mobil:             ' . get_post_meta($id, 'rs_mobil', true),
+            'E-mail:            ' . get_post_meta($id, 'rs_email', true),
+            'Počet osob:        ' . $pocet,
+        ];
+    } else {
+        $nar = get_post_meta($id, 'rs_datum_narozeni', true);
+        $lines = [
+            'Jméno:             ' . trim(get_post_meta($id, 'rs_jmeno', true) . ' ' . get_post_meta($id, 'rs_prijmeni', true)),
+            'Datum narození:    ' . ($nar ? rs_format_datum($nar . ' 00:00:00') : ''),
+            'Bydliště:          ' . get_post_meta($id, 'rs_bydliste', true),
+            'Mobil:             ' . get_post_meta($id, 'rs_mobil', true),
+            'E-mail:            ' . get_post_meta($id, 'rs_email', true),
+            'Počet osob:        ' . $pocet,
+        ];
+    }
+    if ($poznamka) $lines[] = 'Poznámka:          ' . $poznamka;
+    return implode("\n", $lines);
 }
 
 function rs_format_datum(string $d): string {
@@ -201,7 +232,8 @@ function rs_notifikuj_nova(int $id) {
 
     foreach (rs_spravci_emaily() as $se)
         rs_mail($se, "Nová žádost o rezervaci – {$prostor}",
-            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nŽadatel: " . rs_rez_jmeno($id) . "\nTermín: {$od} – {$do_}\n\nZpracujte ji v administraci rezervačního systému.");
+            "Nová žádost o rezervaci.\n\nProstor: {$prostor}\nTermín: {$od} – {$do_}\n\n--- Žadatel ---\n" . rs_rez_udaje($id) . "\n\nZpracujte ji v administraci rezervačního systému.",
+            $email);
 }
 
 function rs_notifikuj_potvrzeni(int $id) {
