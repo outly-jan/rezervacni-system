@@ -2406,6 +2406,26 @@ function rs_formular_sc(): string {
             else{alert('ARES: '+d.data);}
         });
     }
+    function rsCelyDen(cb, prefix) {
+        var casWrap = document.getElementById('rs-' + prefix + '-cas-wrap');
+        var denWrap = document.getElementById('rs-' + prefix + '-den-wrap');
+        if (!casWrap || !denWrap) return;
+        var dtOd = casWrap.querySelector('[name=' + prefix + '_datum_od]');
+        var dtDo = casWrap.querySelector('[name=' + prefix + '_datum_do]');
+        var dOd  = denWrap.querySelector('[name=' + prefix + '_datum_od_den]');
+        var dDo  = denWrap.querySelector('[name=' + prefix + '_datum_do_den]');
+        if (cb.checked) {
+            if (dtOd && dtOd.value) dOd.value = dtOd.value.split('T')[0];
+            if (dtDo && dtDo.value) dDo.value = dtDo.value.split('T')[0];
+            casWrap.style.display = 'none';
+            denWrap.style.display = '';
+        } else {
+            if (dOd && dOd.value) dtOd.value = dOd.value + 'T00:00';
+            if (dDo && dDo.value) dtDo.value = dDo.value + 'T00:00';
+            casWrap.style.display = '';
+            denWrap.style.display = 'none';
+        }
+    }
     </script>
     <?php
     return ob_get_clean();
