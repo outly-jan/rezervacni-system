@@ -1327,7 +1327,6 @@ function rs_sekce_nastaveni(): string {
         if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_nastaveni')) return rs_alert('Neplatný token.','error');
 
         update_option('rs_vzdusne_aktivni', isset($_POST['vzdusne_aktivni']) ? '1' : '0');
-        update_option('rs_formular_url',   esc_url_raw($_POST['formular_url'] ?? ''));
         update_option('rs_doplnujici_info_ext', wp_kses_post($_POST['doplnujici_info_ext'] ?? ''));
         update_option('rs_doplnujici_info_int', wp_kses_post($_POST['doplnujici_info_int'] ?? ''));
         update_option('rs_stredisko_kontakt_jmeno', sanitize_text_field($_POST['stredisko_kontakt_jmeno'] ?? ''));
@@ -1354,7 +1353,6 @@ function rs_sekce_nastaveni(): string {
     $info        = get_option('rs_vzdusne_info', '');
     $dop_info_ext = get_option('rs_doplnujici_info_ext', get_option('rs_doplnujici_info', ''));
     $dop_info_int = get_option('rs_doplnujici_info_int', '');
-    $formular_url_opt = get_option('rs_formular_url', '');
     $kont_jmeno  = get_option('rs_stredisko_kontakt_jmeno', '');
     $kont_mobil  = get_option('rs_stredisko_kontakt_mobil', '');
     $kont_email  = get_option('rs_stredisko_kontakt_email', '');
@@ -1363,12 +1361,6 @@ function rs_sekce_nastaveni(): string {
     echo "<h3 class='rs-section-title'>Nastavení</h3>{$zprava}";
     echo "<form method='post'>" . wp_nonce_field('rs_nastaveni','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_nast_action' value='ulozit'>";
-
-    // URL rezervačního formuláře
-    echo "<div class='rs-card'><h4 class='rs-card-title'>URL rezervačního formuláře</h4>";
-    echo "<div class='rs-form-group'><label style='font-weight:normal;font-size:13px;color:#555;margin-bottom:6px;display:block'>Adresa stránky se shortcodem <code>&#91;rs_formular&#93;</code>. Zobrazí se jako tlačítko &bdquo;Rezervovat prostory&rdquo; v kalendáři. <strong>Pole je nepovinné</strong> – systém stránku se shortcodem nalezne automaticky.</label>";
-    echo "<input type='url' name='formular_url' value='" . esc_attr($formular_url_opt) . "' placeholder='https://www.example.com/rezervace/' style='max-width:520px'></div>";
-    echo "</div>";
 
     // Doplňující informace
     echo "<div class='rs-card'><h4 class='rs-card-title'>Doplňující informace</h4>";
