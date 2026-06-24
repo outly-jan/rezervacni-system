@@ -1199,7 +1199,7 @@ function rs_sekce_ceny(): string {
     echo "<div class='rs-card'>";
     echo "<form method='post'>" . wp_nonce_field('rs_ceny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_ceny_action' value='ulozit'>";
-    echo "<div class='rs-form-group'><label>Vyberte prostor</label><select name='ceny_prostor_id' onchange='this.form.submit()'>";
+    echo "<div class='rs-form-group'><label>Vyberte prostor</label><select name='ceny_prostor_id' onchange='window.location.href=location.pathname+\"?ceny_pid=\"+this.value+\"#rs-ceny\"'>";
     foreach ($prostory as $p) {
         $sel = $p->ID === $sel_pid ? 'selected' : '';
         $typ_id = get_post_meta($p->ID,'rs_typ_id',true);
