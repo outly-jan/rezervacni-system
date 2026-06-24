@@ -516,6 +516,7 @@ function rs_admin_sc(): string {
     }
     if (rs_ma_pravo('spravce')) echo "<button data-tab='rezervace' onclick='rsTab(\"rezervace\",this)'>Správa rezervací</button>";
     if (rs_ma_pravo('vedeni'))  echo "<button data-tab='interni'   onclick='rsTab(\"interni\",this)'  >Interní rezervace</button>";
+    if (rs_ma_pravo('vedeni'))  echo "<button data-tab='napoveda'  onclick='rsTab(\"napoveda\",this)' >Popis aplikace</button>";
     echo "</div>";
 
     // Panels
@@ -529,6 +530,7 @@ function rs_admin_sc(): string {
     }
     if (rs_ma_pravo('spravce')) echo "<div id='rs-panel-rezervace'>". rs_sekce_rezervace() . "</div>";
     if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-interni'>"  . rs_sekce_interni()   . "</div>";
+    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-napoveda'>" . rs_sekce_napoveda()  . "</div>";
     echo "</div>";
 
     echo "</div>"; // .rs-wrap
@@ -3250,4 +3252,67 @@ function rs_ucastnik_row(int|string $i, array $u): string {
         . "<div class='rs-form-group'><label>Adresa pobytu</label><input type='text' name='ucast_adresa[]' value='{$a}'></div>"
         . "<div class='rs-form-group' style='align-self:flex-end'><label><input type='checkbox' name='ucast_neplati[{$i}]' {$nc}> Neplatí poplatek</label></div>"
         . "</div></div>";
+}
+
+// ═══ SEKCE: POPIS APLIKACE ═══════════════════════════════════════════════════
+
+function rs_sekce_napoveda(): string {
+    ob_start(); ?>
+<div style="max-width:820px;line-height:1.7;font-size:15px">
+
+<h2 style="margin-top:0">Rezervační systém – Chata Chlumec</h2>
+<p>Tato aplikace slouží ke správě rezervací objektů (hlavní chata, zázemí apod.). Umožňuje přijímat žádosti od veřejnosti i plánovat vlastní interní akce oddílu – vše na jednom místě, přehledně a bez nutnosti používat e-mail nebo tabulky.</p>
+
+<hr style="margin:24px 0">
+
+<h3>🌐 Co vidí veřejnost (nepřihlášení návštěvníci)</h3>
+<ul>
+  <li><strong>Kalendář obsazenosti</strong> – přehledný měsíční kalendář zobrazující, kdy jsou objekty volné a kdy obsazené. Potvrzené a čekající rezervace jsou barevně odlišeny.</li>
+  <li><strong>Formulář pro poptávku</strong> – návštěvník vyplní své kontaktní údaje, zvolí požadovaný termín a objekt, uvede počet osob a odešle žádost. Ta pak čeká na schválení správcem.</li>
+</ul>
+
+<hr style="margin:24px 0">
+
+<h3>👥 Vedoucí (role Author a výše)</h3>
+<p>Vedoucí mají přístup k záložce <strong>Interní rezervace</strong>, kde mohou:</p>
+<ul>
+  <li>Zadat interní akci oddílu (výprava, schůzka, soustředění apod.) přímo bez schvalovacího procesu.</li>
+  <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Všechny termíny se pak v přehledu zobrazí sbalené pod jedno označení série, aby tabulku nepřeplňovaly.</li>
+  <li>Editovat nebo zrušit jednotlivé termíny, případně celou sérii najednou.</li>
+</ul>
+
+<hr style="margin:24px 0">
+
+<h3>📋 Správce rezervací</h3>
+<p>Správce má navíc záložku <strong>Správa rezervací</strong>, kde:</p>
+<ul>
+  <li>Vidí všechny rezervace rozdělené na <strong>Externí</strong> (žádosti od veřejnosti) a <strong>Interní</strong> (akce oddílu).</li>
+  <li>Může rezervaci <strong>potvrdit</strong> nebo <strong>zamítnout</strong> – žadatel je o změně informován automatickým e-mailem.</li>
+  <li>U externích rezervací vidí kontaktní údaje žadatele, termín, počet osob a stav rezervace.</li>
+  <li>Může kdykoli zobrazit detail rezervace, upravit ji nebo ji zrušit.</li>
+</ul>
+
+<hr style="margin:24px 0">
+
+<h3>⚙️ Administrátor systému</h3>
+<p>Administrátor má přístup ke všem záložkám a nastavením:</p>
+<ul>
+  <li><strong>Typy objektů</strong> – definuje kategorie (např. „Chata", „Kemp"), ke každé může přidat popis a fotografii.</li>
+  <li><strong>Objekty</strong> – spravuje konkrétní pronajímatelné prostory, jejich kapacitu, popis a přiřazení k typu.</li>
+  <li><strong>Prázdniny & Svátky</strong> – nastavuje dny, kdy systém upozorní nebo zablokuje rezervace (státní svátky, tábor apod.).</li>
+  <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za objekt podle sezóny nebo typu pobytu (noc, den, víkend…).</li>
+  <li><strong>Nastavení</strong> – obecná konfigurace systému (kontaktní e-mail, texty na webu, podmínky rezervace apod.).</li>
+</ul>
+
+<hr style="margin:24px 0">
+
+<h3>📌 Tipy a zkratky</h3>
+<ul>
+  <li>Po odeslání formuláře se stránka vrátí na stejnou pozici, kde jsi byl – nemusíš scrollovat zpět.</li>
+  <li>Aktivní záložka se pamatuje i po obnovení stránky – pracuj pohodlně bez ztráty kontextu.</li>
+  <li>Sériové rezervace lze rozbalit kliknutím na řádek skupiny – pak jsou vidět jednotlivé termíny s možností editace.</li>
+</ul>
+
+</div>
+<?php return ob_get_clean();
 }
