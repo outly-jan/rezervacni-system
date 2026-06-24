@@ -1261,7 +1261,8 @@ function rs_sekce_nastaveni(): string {
 
         update_option('rs_vzdusne_aktivni', isset($_POST['vzdusne_aktivni']) ? '1' : '0');
         update_option('rs_formular_url',   esc_url_raw($_POST['formular_url'] ?? ''));
-        update_option('rs_doplnujici_info', wp_kses_post($_POST['doplnujici_info'] ?? ''));
+        update_option('rs_doplnujici_info_ext', wp_kses_post($_POST['doplnujici_info_ext'] ?? ''));
+        update_option('rs_doplnujici_info_int', wp_kses_post($_POST['doplnujici_info_int'] ?? ''));
         // Vzdušné kategorie
         $kategorie = [];
         $kat_od  = (array)($_POST['kat_od']  ?? []);
@@ -1281,7 +1282,8 @@ function rs_sekce_nastaveni(): string {
     $kat         = get_option('rs_vzdusne_kategorie', []);
     $neplatici   = get_option('rs_vzdusne_neplatici', '0') === '1';
     $info        = get_option('rs_vzdusne_info', '');
-    $dop_info    = get_option('rs_doplnujici_info', '');
+    $dop_info_ext = get_option('rs_doplnujici_info_ext', get_option('rs_doplnujici_info', ''));
+    $dop_info_int = get_option('rs_doplnujici_info_int', '');
     $formular_url_opt = get_option('rs_formular_url', '');
 
     ob_start();
@@ -1291,13 +1293,14 @@ function rs_sekce_nastaveni(): string {
 
     // URL rezervačního formuláře
     echo "<div class='rs-card'><h4 class='rs-card-title'>URL rezervačního formuláře</h4>";
-    echo "<div class='rs-form-group'><label style='font-weight:normal;font-size:13px;color:#555;margin-bottom:6px;display:block'>Adresa stránky se shortcode [rs_formular]. Zobrazí se jako tlačítko &bdquo;Rezervovat prostory&rdquo; v kalendáři.</label>";
+    echo "<div class='rs-form-group'><label style='font-weight:normal;font-size:13px;color:#555;margin-bottom:6px;display:block'>Adresa stránky se shortcodem <code>[rs_formular]</code>. Zobrazí se jako tlačítko &bdquo;Rezervovat prostory&rdquo; v kalendáři. <strong>Pole je nepovinné</strong> – systém stránku se shortcodem nalezne automaticky.</label>";
     echo "<input type='url' name='formular_url' value='" . esc_attr($formular_url_opt) . "' placeholder='https://www.example.com/rezervace/' style='max-width:520px'></div>";
     echo "</div>";
 
     // Doplňující informace
-    echo "<div class='rs-card'><h4 class='rs-card-title'>Doplňující informace (zobrazí se na frontendu pod formulářem)</h4>";
-    echo "<div class='rs-form-group'><textarea name='doplnujici_info' rows='6' style='max-width:100%'>" . esc_textarea($dop_info) . "</textarea></div>";
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Doplňující informace</h4>";
+    echo "<div class='rs-form-group'><label>Pro externí rezervace <span style='font-weight:normal;font-size:12px;color:#666'>(zobrazí se na frontendu pod formulářem a v kalendáři)</span></label><textarea name='doplnujici_info_ext' rows='5' style='max-width:100%'>" . esc_textarea($dop_info_ext) . "</textarea></div>";
+    echo "<div class='rs-form-group'><label>Pro interní rezervace <span style='font-weight:normal;font-size:12px;color:#666'>(zobrazí se správcům ve formuláři Interní rezervace)</span></label><textarea name='doplnujici_info_int' rows='5' style='max-width:100%'>" . esc_textarea($dop_info_int) . "</textarea></div>";
     echo "</div>";
 
     // Vzdušné
@@ -1637,6 +1640,8 @@ function rs_sekce_interni(): string {
 
     ob_start();
     echo "<h3 class='rs-section-title'>Interní rezervace</h3>{$zprava}";
+    $dop_int = get_option('rs_doplnujici_info_int','');
+    if ($dop_int) echo "<div style='margin-bottom:16px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($dop_int)) . "</div>";
 
     // Formulář nové rezervace
     $authors = get_users(['role__in' => ['author','administrator','admin_rezervacniho_systemu','spravce_rezervaci'], 'orderby' => 'display_name', 'order' => 'ASC']);
@@ -2219,7 +2224,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "</div>";
     }
 
-    $doplnujici = get_option('rs_doplnujici_info','');
+    $doplnujici = get_option('rs_doplnujici_info_ext', get_option('rs_doplnujici_info',''));
     if ($doplnujici) echo "<div style='margin-top:20px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($doplnujici)) . "</div>";
 
     // Modal pro detail dne
@@ -2558,7 +2563,7 @@ function rs_formular_sc(): string {
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>Odeslat žádost o rezervaci</button></div>";
     echo "</form>";
 
-    $doplnujici = get_option('rs_doplnujici_info','');
+    $doplnujici = get_option('rs_doplnujici_info_ext', get_option('rs_doplnujici_info',''));
     if ($doplnujici) echo "<div style='margin-top:24px;padding:14px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;font-size:13px'>" . wp_kses_post(nl2br($doplnujici)) . "</div>";
 
     echo "</div>"; // .rs-wrap
