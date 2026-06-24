@@ -486,10 +486,10 @@ document.addEventListener('DOMContentLoaded',function(){
     if(activBtn){activBtn.click();}else{var first=document.querySelector('.rs-menu button');if(first)first.click();}
     // Obnovit pozici po odeslání formuláře
     try{var sy=sessionStorage.getItem('rs_scroll_y');if(sy!==null){sessionStorage.removeItem('rs_scroll_y');window.scrollTo(0,parseInt(sy));}}catch(e){}
-});
-// Uložit pozici před odesláním libovolného formuláře v admin panelu
-document.querySelectorAll('.rs-wrap form').forEach(function(f){
-    f.addEventListener('submit',function(){try{sessionStorage.setItem('rs_scroll_y',window.scrollY);}catch(e){}});
+    // Uložit pozici před odesláním (musí být uvnitř DOMContentLoaded, jinak formuláře ještě neexistují)
+    document.querySelectorAll('.rs-wrap form').forEach(function(f){
+        f.addEventListener('submit',function(){try{sessionStorage.setItem('rs_scroll_y',window.scrollY);}catch(e){}});
+    });
 });
 </script>
 <?php }
