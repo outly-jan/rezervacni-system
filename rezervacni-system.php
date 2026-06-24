@@ -108,6 +108,30 @@ function rs_get_segmenty(int $pid): array {
 }
 function rs_ma_segmenty(int $pid): bool { return get_post_meta($pid, 'rs_ma_segmenty', true) === '1'; }
 
+function rs_je_ext_vypnuto(int $id): bool {
+    if (get_post_meta($id, 'rs_ext_vypnuto', true) !== '1') return false;
+    $od   = get_post_meta($id, 'rs_ext_vypnuto_od', true);
+    $do_  = get_post_meta($id, 'rs_ext_vypnuto_do', true);
+    $dnes = date('Y-m-d');
+    if ($od  && $dnes < $od)  return false; // ještě nezačalo
+    if ($do_ && $dnes > $do_) return false; // už skončilo
+    return true;
+}
+
+function rs_ext_vypnuto_badge(int $id): string {
+    if (get_post_meta($id, 'rs_ext_vypnuto', true) !== '1') return '';
+    $od   = get_post_meta($id, 'rs_ext_vypnuto_od', true);
+    $do_  = get_post_meta($id, 'rs_ext_vypnuto_do', true);
+    $dnes = date('Y-m-d');
+    $aktivni = !($od && $dnes < $od) && !($do_ && $dnes > $do_);
+    $ods  = $od  ? date('j.n.', strtotime($od))  : '';
+    $dos  = $do_ ? date('j.n.', strtotime($do_)) : '';
+    $rozsah = ($ods || $dos) ? (' ' . ($ods ?: '?') . '–' . ($dos ?: '∞')) : '';
+    return $aktivni
+        ? "<span style='color:#c0392b;font-size:11px;white-space:nowrap'>🚫 Ext. vypnuto{$rozsah}</span>"
+        : "<span style='color:#888;font-size:11px;white-space:nowrap'>⏳ Ext. vyp.{$rozsah}</span>";
+}
+
 function rs_stav_badge(string $stav): string {
     return match($stav) {
         'cekajici'  => "<span class='rs-badge rs-badge-warn'>Čeká na schválení</span>",
@@ -584,7 +608,7 @@ function rs_sekce_prostory(): string {
     // === Seznam prostor (vždy nahoře) ===
     $url_base = remove_query_arg(['rs_edit_prostor','rs_edit_seg','rs_add_prostor']);
     if ($prostory) {
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostor</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled prostor</h4><table class='rs-table'><thead><tr><th>Název</th><th>Typ</th><th>Segmenty</th><th>Kapacita</th><th>Ext. rezervace</th><th>Akce</th></tr></thead><tbody>";
         foreach ($prostory as $p) {
             $typ_id = get_post_meta($p->ID,'rs_typ_id',true);
             $typ_n  = $typ_id ? get_the_title($typ_id) : '–';
@@ -601,6 +625,7 @@ function rs_sekce_prostory(): string {
             echo "<td>" . esc_html($typ_n) . "</td>";
             echo "<td>" . (rs_ma_segmenty($p->ID) ? count($segs) . ' segmentů' : '–') . "</td>";
             echo "<td>" . $kap_txt . "</td>";
+            echo "<td>" . (rs_ext_vypnuto_badge($p->ID) ?: '<span style="color:#1a5c2a;font-size:11px">✓ aktivní</span>') . "</td>";
             echo "<td>";
             echo "<a href='" . esc_url(add_query_arg('rs_edit_prostor',$p->ID,$url_base)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
             echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat prostor? Možné jen bez rezervací.\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
@@ -656,6 +681,8 @@ function rs_sekce_prostory(): string {
         $fotky = $edit ? (array)get_post_meta($edit->ID,'rs_fotky',true) : [];
         echo rs_foto_field('prostor', $fotky);
 
+        echo rs_ext_vypnuto_field($edit ? $edit->ID : 0);
+
         echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit prostoru' : '➕ Přidat prostor') . "</button>";
         echo "<a href='" . esc_url($url_base) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
         echo "</div></form></div>";
@@ -690,16 +717,18 @@ function rs_sekce_prostory(): string {
         echo "</div>";
         echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='segment_doplnujici' rows='2'>{$s_dop}</textarea></div>";
         echo rs_foto_field('segment', $s_fotky);
+        echo rs_ext_vypnuto_field($edit_seg ? $edit_seg->ID : 0);
         echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit segment</button>";
         if ($edit_seg) echo "<a href='" . esc_url(remove_query_arg('rs_edit_seg')) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
         echo "</div></form>";
 
         if ($segmenty) {
-            echo "<table class='rs-table' style='margin-top:16px'><thead><tr><th>Název</th><th>Rozloha</th><th>Kapacita</th><th>Akce</th></tr></thead><tbody>";
+            echo "<table class='rs-table' style='margin-top:16px'><thead><tr><th>Název</th><th>Rozloha</th><th>Kapacita</th><th>Ext. rezervace</th><th>Akce</th></tr></thead><tbody>";
             foreach ($segmenty as $seg) {
                 echo "<tr><td>" . esc_html($seg->post_title) . "</td>";
                 echo "<td>" . esc_html(get_post_meta($seg->ID,'rs_rozloha',true)) . " m²</td>";
                 echo "<td>" . esc_html(get_post_meta($seg->ID,'rs_kapacita',true)) . " os.</td>";
+                echo "<td>" . (rs_ext_vypnuto_badge($seg->ID) ?: '<span style="color:#1a5c2a;font-size:11px">✓ aktivní</span>') . "</td>";
                 echo "<td>";
                 echo "<a href='" . esc_url(add_query_arg(['rs_edit_prostor'=>$edit->ID,'rs_edit_seg'=>$seg->ID])) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>✏️</a> ";
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Smazat segment?\")'>" . wp_nonce_field('rs_prostor','_wpnonce_prostor',true,false);
@@ -754,6 +783,29 @@ function rs_sekce_prostory(): string {
     return ob_get_clean();
 }
 
+function rs_ext_vypnuto_field(int $id): string {
+    $on  = $id ? get_post_meta($id, 'rs_ext_vypnuto', true) === '1' : false;
+    $od  = $id ? esc_attr(get_post_meta($id, 'rs_ext_vypnuto_od', true)) : '';
+    $do_ = $id ? esc_attr(get_post_meta($id, 'rs_ext_vypnuto_do', true)) : '';
+    $chk = $on ? 'checked' : '';
+    $sty = $on ? '' : "style='display:none'";
+    ob_start();
+    echo "<div class='rs-form-group' style='margin-top:12px;padding:12px;background:#fff8f8;border:1px solid #f5c6cb;border-radius:4px'>";
+    echo "<label><input type='checkbox' name='ext_vypnuto' {$chk} onchange=\"document.getElementById('rs-ev-dates-{$id}').style.display=this.checked?'':'none'\"> Vypnout pro externí rezervace</label>";
+    echo "<div id='rs-ev-dates-{$id}' {$sty} style='display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;align-items:center'>";
+    echo "<div class='rs-form-group' style='margin:0'><label style='font-size:12px'>Od (nepovinné)</label><input type='date' name='ext_vypnuto_od' value='{$od}'></div>";
+    echo "<div class='rs-form-group' style='margin:0'><label style='font-size:12px'>Do (nepovinné)</label><input type='date' name='ext_vypnuto_do' value='{$do_}'></div>";
+    echo "<p style='font-size:11px;color:#888;margin:4px 0 0;width:100%'>Prázdné pole = bez omezení termínu (od ihned / do odvolání).</p>";
+    echo "</div></div>";
+    return ob_get_clean();
+}
+
+function rs_uloz_ext_vypnuto(int $id): void {
+    update_post_meta($id, 'rs_ext_vypnuto', isset($_POST['ext_vypnuto']) ? '1' : '0');
+    update_post_meta($id, 'rs_ext_vypnuto_od', sanitize_text_field($_POST['ext_vypnuto_od'] ?? ''));
+    update_post_meta($id, 'rs_ext_vypnuto_do', sanitize_text_field($_POST['ext_vypnuto_do'] ?? ''));
+}
+
 function rs_foto_field(string $field, array $existing_ids): string {
     ob_start();
     echo "<div class='rs-form-group'><label>Fotky</label>";
@@ -801,6 +853,7 @@ function rs_prostor_zpracuj(string $action): string {
                 update_post_meta($id,'rs_doplnujici',sanitize_textarea_field($_POST['prostor_doplnujici']??''));
             }
             rs_uloz_fotky($id, 'prostor');
+            rs_uloz_ext_vypnuto($id);
             return rs_alert('Prostor přidán. <a href="' . esc_url(add_query_arg('rs_edit_prostor',$id)) . '">Přejít na úpravu / přidat segmenty</a>');
         }
         case 'upravit_prostor': {
@@ -820,6 +873,7 @@ function rs_prostor_zpracuj(string $action): string {
                 update_post_meta($id,'rs_doplnujici',sanitize_textarea_field($_POST['prostor_doplnujici']??''));
             }
             rs_uloz_fotky($id, 'prostor');
+            rs_uloz_ext_vypnuto($id);
             return rs_alert('Prostor uložen.');
         }
         case 'smazat_prostor': {
@@ -842,6 +896,7 @@ function rs_prostor_zpracuj(string $action): string {
             update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
             update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
             rs_uloz_fotky($sid, 'segment');
+            rs_uloz_ext_vypnuto($sid);
             rs_prepocitej_kapacitu_prostoru($pid);
             return rs_alert('Segment přidán.');
         }
@@ -854,6 +909,7 @@ function rs_prostor_zpracuj(string $action): string {
             update_post_meta($sid,'rs_kapacita', (int)($_POST['segment_kapacita']??0));
             update_post_meta($sid,'rs_doplnujici',sanitize_textarea_field($_POST['segment_doplnujici']??''));
             rs_uloz_fotky($sid, 'segment');
+            rs_uloz_ext_vypnuto($sid);
             if ($pid) rs_prepocitej_kapacitu_prostoru($pid);
             return rs_alert('Segment uložen.');
         }
@@ -2062,6 +2118,10 @@ function rs_kalendar_sc(array $atts): string {
         $p_typy[$p->ID] = $tid ? get_the_title($tid) : '';
     }
 
+    // Odfiltrovat prostory vypnuté pro ext. rezervace
+    $prostory = array_values(array_filter($prostory, fn($p) => !rs_je_ext_vypnuto($p->ID)));
+    if (empty($prostory)) { echo "<p>Žádné prostory nejsou momentálně k dispozici pro rezervaci.</p></div>"; return ob_get_clean(); }
+
     // Tab bar
     echo "<div style='display:flex;flex-wrap:wrap;gap:0;border-bottom:2px solid #1a5c2a;margin-bottom:0'>";
     foreach ($prostory as $i => $p) {
@@ -2177,6 +2237,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "</tr></thead><tbody>";
 
         foreach ($items as $item) {
+            if (rs_je_ext_vypnuto($item->ID)) continue;
             $tid = $item->ID;
             $seg_link = (!empty($rsSegData[$tid]['ok']))
                 ? "<a href='#' onclick='rsSegDetail(" . (int)$tid . ");return false;' style='color:#1a5c2a;text-decoration:underline dotted;cursor:pointer'>" . esc_html($item->post_title) . "</a>"
@@ -2218,6 +2279,7 @@ function rs_kalendar_sc(array $atts): string {
         $seg_blocks = [];
         if (rs_ma_segmenty($p->ID)) {
             foreach ($items as $seg_item) {
+                if (rs_je_ext_vypnuto($seg_item->ID)) continue;
                 $seg_kap   = (int)get_post_meta($seg_item->ID,'rs_kapacita',true);
                 $seg_roz   = (int)get_post_meta($seg_item->ID,'rs_rozloha',true);
                 $seg_popis = trim($seg_item->post_content);
@@ -2588,6 +2650,7 @@ function rs_formular_sc(): string {
     echo "<div class='rs-form-group'><label>Prostor *</label><select name='ext_prostor_id' id='rs-ext-prostor' onchange='rsExtProstorChange(this.value)' required>";
     echo "<option value=''>– vyberte –</option>";
     foreach ($prostory as $p) {
+        if (rs_je_ext_vypnuto($p->ID)) continue;
         $sel = $old_prostor === $p->ID ? ' selected' : '';
         echo "<option value='{$p->ID}'{$sel}>" . esc_html($p->post_title) . "</option>";
     }
@@ -2638,8 +2701,10 @@ function rs_formular_sc(): string {
         $sd = [];
         foreach ($prostory as $p) {
             if (rs_ma_segmenty($p->ID))
-                foreach (rs_get_segmenty($p->ID) as $s)
+                foreach (rs_get_segmenty($p->ID) as $s) {
+                    if (rs_je_ext_vypnuto($s->ID)) continue;
                     $sd[$p->ID][] = ['id'=>$s->ID,'nazev'=>$s->post_title];
+                }
         }
         echo json_encode($sd);
     ?>;
