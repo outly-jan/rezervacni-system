@@ -2426,6 +2426,19 @@ function rs_formular_sc(): string {
     // Token-based management má přednost
     if (isset($_GET['rs_sprava'])) return rs_render_sprava_rezervace();
 
+    // Přihlášení organizátoři patří do admin panelu, ne sem
+    if (rs_ma_pravo('vedeni')) {
+        $admin_url = rs_admin_url();
+        ob_start();
+        rs_css();
+        echo "<div class='rs-wrap'>";
+        echo "<div style='padding:20px;background:#f8f9fa;border:1px solid #ddd;border-radius:6px;text-align:center'>";
+        echo "<p style='margin:0 0 12px;font-size:15px'>Jste přihlášen/a jako organizátor. Rezervace pro vlastní potřebu zadávejte přes <strong>Interní rezervace</strong> v administraci.</p>";
+        echo "<a href='" . esc_url($admin_url) . "#rs-interni' class='rs-btn rs-btn-primary'>Přejít do administrace</a>";
+        echo "</div></div>";
+        return ob_get_clean();
+    }
+
     $zprava = '';
     $hotovo = false;
 
