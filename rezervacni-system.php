@@ -3295,7 +3295,7 @@ function rs_sekce_napoveda(): string {
   <li>Vidí všechny rezervace rozdělené na <strong>Externí</strong> (žádosti od veřejnosti) a <strong>Interní</strong> (akce oddílu).</li>
   <li>Může rezervaci <strong>potvrdit</strong> nebo <strong>zamítnout</strong> – žadatel je o změně informován automatickým e-mailem.</li>
   <li>U externích rezervací vidí kontaktní údaje žadatele, termín, počet osob a stav rezervace.</li>
-  <li>Cena je automaticky vypočtena podle ceníku a zobrazena u každé rezervace. Správce ji může v případě potřeby individuálně upravit přímo v detailu rezervace.</li>
+  <li>Cena je automaticky vypočtena podle ceníku a zobrazena u každé rezervace. Systém přitom respektuje nastavenou minimální cenu – pokud by výsledná cena za počet osob a nocí byla nižší, naúčtuje se minimální cena. Správce ji může v případě potřeby individuálně upravit přímo v detailu rezervace.</li>
   <li>Může kdykoli zobrazit detail rezervace, upravit ji nebo ji zrušit.</li>
 </ul>
 
