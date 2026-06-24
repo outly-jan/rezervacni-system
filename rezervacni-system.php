@@ -1296,12 +1296,12 @@ function rs_sekce_nastaveni(): string {
                 $nazev = sanitize_text_field($_POST['oddil_nazev'] ?? '');
                 if ($nazev) {
                     if (in_array($nazev, $oddily, true)) {
-                        $zprava_oddil = rs_alert('Oddíl/Družina s tímto názvem již existuje.','error');
+                        $zprava_oddil = rs_alert('Součást s tímto názvem již existuje.','error');
                     } else {
                         $oddily[] = $nazev;
                         sort($oddily);
                         update_option('rs_oddily', $oddily);
-                        $zprava_oddil = rs_alert('Oddíl přidán.');
+                        $zprava_oddil = rs_alert('Součást přidána.');
                     }
                 }
             } elseif ($action === 'upravit_oddil') {
@@ -1311,14 +1311,14 @@ function rs_sekce_nastaveni(): string {
                     $oddily[$idx] = $nazev;
                     sort($oddily);
                     update_option('rs_oddily', $oddily);
-                    $zprava_oddil = rs_alert('Oddíl uložen.');
+                    $zprava_oddil = rs_alert('Součást uložena.');
                 }
             } elseif ($action === 'smazat_oddil') {
                 $idx = (int)($_POST['oddil_idx'] ?? -1);
                 if ($idx >= 0 && isset($oddily[$idx])) {
                     unset($oddily[$idx]);
                     update_option('rs_oddily', array_values($oddily));
-                    $zprava_oddil = rs_alert('Oddíl smazán.');
+                    $zprava_oddil = rs_alert('Součást smazána.');
                 }
             }
         }
@@ -1397,16 +1397,16 @@ function rs_sekce_nastaveni(): string {
     echo "</div>"; // rs-vzdusne-detail
     echo "</div>"; // card
 
-    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit nastavení</button></div>";
+    echo "<div class='rs-btn-row' style='margin-bottom:32px'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit nastavení</button></div>";
     echo "</form>";
 
-    // Oddíly a Družiny
+    // Součásti střediska
     $oddily = get_option('rs_oddily', []);
-    echo "<div class='rs-card'><h4 class='rs-card-title'>Oddíly a Družiny</h4>{$zprava_oddil}";
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Součásti střediska</h4>{$zprava_oddil}";
     echo "<form id='rs-oddil-form' method='post' class='rs-form-row'>" . wp_nonce_field('rs_oddily','_wpnonce_oddil',true,false);
     echo "<input type='hidden' id='rs-oddil-action' name='rs_oddil_action' value='pridat_oddil'>";
     echo "<input type='hidden' id='rs-oddil-idx' name='oddil_idx' value=''>";
-    echo "<div class='rs-form-group'><label>Název</label><input type='text' name='oddil_nazev' required placeholder='např. Vlci, 2. oddíl…'></div>";
+    echo "<div class='rs-form-group'><label>Název</label><input type='text' name='oddil_nazev' required placeholder='např. Vlci, Bobříci…'></div>";
     echo "<div class='rs-form-group' style='align-self:flex-end'>";
     echo "<button id='rs-oddil-submit' type='submit' class='rs-btn rs-btn-primary'>➕ Přidat</button> ";
     echo "<button id='rs-oddil-cancel' type='button' class='rs-btn rs-btn-secondary' style='display:none' onclick='rsOddiluReset()'>Zrušit</button>";
@@ -1419,7 +1419,7 @@ function rs_sekce_nastaveni(): string {
             echo "<button type='button' class='rs-btn rs-btn-sm rs-btn-secondary' onclick='rsOddiluEdit({$i},\"{$js_o}\")'>✏️</button> ";
             echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_oddily','_wpnonce_oddil',true,false);
             echo "<input type='hidden' name='rs_oddil_action' value='smazat_oddil'><input type='hidden' name='oddil_idx' value='{$i}'>";
-            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' onclick='return confirm(\"Smazat oddíl/družinu?\")'>🗑️</button></form>";
+            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' onclick='return confirm(\"Smazat součást střediska?\")'>🗑️</button></form>";
             echo "</td></tr>";
         }
         echo "</tbody></table>";
@@ -1750,7 +1750,7 @@ function rs_sekce_interni(): string {
         echo "<option value='{$u->ID}' {$sel}>" . esc_html($u->display_name) . "</option>";
     }
     echo "</select></div>";
-    echo "<div class='rs-form-group'><label>Oddíl / Družina</label><select name='int_oddil'>";
+    echo "<div class='rs-form-group'><label>Součást střediska</label><select name='int_oddil'>";
     echo "<option value=''>– nevybráno –</option>";
     foreach ($oddily as $o) echo "<option value='" . esc_attr($o) . "'>" . esc_html($o) . "</option>";
     echo "</select></div>";
@@ -1797,7 +1797,7 @@ function rs_sekce_interni(): string {
     // Přehled rezervací
     if ($rezervace) {
         echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Prostor</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Oddíl</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Prostor</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
 
         foreach ($rezervace as $r) {
             $stav    = get_post_meta($r->ID,'rs_stav',true);
@@ -2428,7 +2428,7 @@ function rs_kalendar_sc(array $atts): string {
             if (rsKalPriv) {
                 if (r.nazev)       html += '<div style="margin-bottom:3px"><strong>Název:</strong> ' + escHtml(r.nazev) + '</div>';
                 if (r.rezervujici) html += '<div style="margin-bottom:3px"><strong>Rezervující:</strong> ' + escHtml(r.rezervujici) + '</div>';
-                if (r.oddil)       html += '<div style="margin-bottom:3px"><strong>Oddíl/Družina:</strong> ' + escHtml(r.oddil) + '</div>';
+                if (r.oddil)       html += '<div style="margin-bottom:3px"><strong>Součást střediska:</strong> ' + escHtml(r.oddil) + '</div>';
                 if (r.poznamka)    html += '<div style="margin-bottom:3px"><strong>Poznámka:</strong> ' + escHtml(r.poznamka) + '</div>';
                 if (r.opakuje)     html += '<div style="margin-bottom:3px;color:#1a5c2a"><strong>🔁 Část opakující se série</strong></div>';
                 var typLabel = r.typ === 'interni' ? 'Interní' : 'Externí';
