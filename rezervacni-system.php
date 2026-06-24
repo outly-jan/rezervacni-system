@@ -2088,7 +2088,8 @@ function rs_kalendar_sc(array $atts): string {
         $p_dop    = get_post_meta($p->ID,'rs_doplnujici',true);
         $p_rezim  = get_post_meta($p->ID,'rs_ceny_rezim',true) ?: 'celek';
         $fmt      = fn(float $v): string => number_format($v, 0, ',', "\xc2\xa0");
-        $p_seg_ceny = [];
+        $p_seg_ceny       = []; // [seg_id => price_str] — vyplněno jen pokud se ceny segmentů liší
+        $p_seg_ceny_chips = []; // chip strings pro info box (jen při různých cenách)
         if (!rs_ma_segmenty($p->ID) || $p_rezim === 'celek') {
             $za_os    = (float)get_post_meta($p->ID,'rs_cena_za_osobu',true);
             $za_min   = (float)get_post_meta($p->ID,'rs_cena_min',true);
@@ -2097,7 +2098,8 @@ function rs_kalendar_sc(array $atts): string {
             elseif ($za_min > 0)             $p_cena = 'Paušálně ' . $fmt($za_min) . '&nbsp;Kč';
             else                             $p_cena = '';
         } else {
-            $p_cena = '';
+            $p_cena  = '';
+            $sc_map  = []; // [seg_id => ['title'=>..., 'cena'=>...]]
             foreach ($items as $s) {
                 $s_os  = (float)get_post_meta($s->ID,'rs_cena_za_osobu',true);
                 $s_min = (float)get_post_meta($s->ID,'rs_cena_min',true);
@@ -2105,7 +2107,18 @@ function rs_kalendar_sc(array $atts): string {
                 elseif ($s_os > 0)             $sc = $fmt($s_os) . '&nbsp;Kč/os.';
                 elseif ($s_min > 0)            $sc = 'Paušálně ' . $fmt($s_min) . '&nbsp;Kč';
                 else                           $sc = '';
-                if ($sc) $p_seg_ceny[] = '💰 <strong>' . esc_html($s->post_title) . ':</strong> ' . $sc;
+                $sc_map[$s->ID] = ['title' => $s->post_title, 'cena' => $sc];
+            }
+            $unique = array_unique(array_filter(array_column($sc_map, 'cena')));
+            if (count($unique) <= 1) {
+                $p_cena = $unique ? reset($unique) : ''; // všechny stejné → jeden chip
+            } else {
+                foreach ($sc_map as $sid => $d) {  // různé → chip za každý segment
+                    if ($d['cena']) {
+                        $p_seg_ceny[$sid]   = $d['cena'];
+                        $p_seg_ceny_chips[] = '💰 <strong>' . esc_html($d['title']) . ':</strong> ' . $d['cena'];
+                    }
+                }
             }
         }
         if ($p_popis || $p_adresa || $p_gps || $p_kap || $p_roz || $p_cena || $p_dop) {
@@ -2120,7 +2133,7 @@ function rs_kalendar_sc(array $atts): string {
             if ($p_kap) $chips[] = "🛏 <strong>" . $p_kap . "&nbsp;míst</strong> na spaní <span style='color:#888'>(přibližný počet)</span>";
             if ($p_roz) $chips[] = "📐 <strong>" . $p_roz . "&nbsp;m²</strong> <span style='color:#888'>(místnosti ke spaní, bez společných prostor)</span>";
             if ($p_cena) $chips[] = "💰 " . $p_cena;
-            foreach ($p_seg_ceny as $sc) $chips[] = $sc;
+            foreach ($p_seg_ceny_chips as $sc) $chips[] = $sc;
             if ($chips) {
                 echo "<div style='display:flex;flex-wrap:wrap;gap:4px 20px'>";
                 foreach ($chips as $chip) echo "<span>" . $chip . "</span>";
@@ -2202,19 +2215,28 @@ function rs_kalendar_sc(array $atts): string {
             $full  = wp_get_attachment_url((int)$fid) ?: $thumb;
             if ($thumb) $fotky_p[] = ['thumb' => $thumb, 'full' => $full];
         }
-        $fotky_segs = [];
+        $seg_blocks = [];
         if (rs_ma_segmenty($p->ID)) {
             foreach ($items as $seg_item) {
-                $seg_imgs = [];
+                $seg_kap   = (int)get_post_meta($seg_item->ID,'rs_kapacita',true);
+                $seg_roz   = (int)get_post_meta($seg_item->ID,'rs_rozloha',true);
+                $seg_popis = trim($seg_item->post_content);
+                $seg_dop   = get_post_meta($seg_item->ID,'rs_doplnujici',true);
+                $seg_cena  = $p_seg_ceny[$seg_item->ID] ?? '';
+                $seg_imgs  = [];
                 foreach ((array)get_post_meta($seg_item->ID,'rs_fotky',true) as $fid) {
                     $thumb = wp_get_attachment_image_url((int)$fid,'medium');
                     $full  = wp_get_attachment_url((int)$fid) ?: $thumb;
                     if ($thumb) $seg_imgs[] = ['thumb' => $thumb, 'full' => $full];
                 }
-                if ($seg_imgs) $fotky_segs[] = ['title' => $seg_item->post_title, 'gal' => 'gal-s-' . $seg_item->ID, 'imgs' => $seg_imgs];
+                if ($seg_kap || $seg_roz || $seg_popis || $seg_dop || $seg_cena || $seg_imgs) {
+                    $seg_blocks[] = ['item' => $seg_item, 'kap' => $seg_kap, 'roz' => $seg_roz,
+                        'popis' => $seg_popis, 'dop' => $seg_dop, 'cena' => $seg_cena,
+                        'imgs' => $seg_imgs, 'gal' => 'gal-s-' . $seg_item->ID];
+                }
             }
         }
-        if ($fotky_p || $fotky_segs) {
+        if ($fotky_p || $seg_blocks) {
             echo "<div style='margin-top:10px'>";
             if ($fotky_p) {
                 $gal_p = 'gal-p-' . $p->ID;
@@ -2222,12 +2244,26 @@ function rs_kalendar_sc(array $atts): string {
                 foreach ($fotky_p as $f) echo "<img src='" . esc_url($f['thumb']) . "' data-full='" . esc_attr($f['full']) . "' data-gallery='" . esc_attr($gal_p) . "' data-caption='' onclick='rsLightbox(this)' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer'>";
                 echo "</div>";
             }
-            foreach ($fotky_segs as $sg) {
-                echo "<div style='margin-top:8px'>";
-                echo "<p style='font-size:12px;font-weight:600;color:#555;margin:0 0 4px'>" . esc_html($sg['title']) . "</p>";
-                echo "<div class='rs-foto-preview'>";
-                foreach ($sg['imgs'] as $f) echo "<img src='" . esc_url($f['thumb']) . "' data-full='" . esc_attr($f['full']) . "' data-gallery='" . esc_attr($sg['gal']) . "' data-caption='' onclick='rsLightbox(this)' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer'>";
-                echo "</div></div>";
+            foreach ($seg_blocks as $sg) {
+                echo "<div style='margin-top:14px'>";
+                echo "<p style='font-size:13px;font-weight:700;color:#333;margin:0 0 6px'>" . esc_html($sg['item']->post_title) . "</p>";
+                $info = [];
+                if ($sg['kap'])  $info[] = "🛏 <strong>" . $sg['kap'] . "&nbsp;míst</strong> na spaní";
+                if ($sg['roz'])  $info[] = "📐 <strong>" . $sg['roz'] . "&nbsp;m²</strong>";
+                if ($sg['cena']) $info[] = "💰 " . $sg['cena'];
+                if ($info) {
+                    echo "<div style='display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:#444;margin-bottom:6px'>";
+                    foreach ($info as $ip) echo "<span>" . $ip . "</span>";
+                    echo "</div>";
+                }
+                if ($sg['popis']) echo "<p style='font-size:12px;color:#555;margin:0 0 6px'>" . nl2br(esc_html($sg['popis'])) . "</p>";
+                if ($sg['dop'])   echo "<p style='font-size:12px;color:#666;margin:0 0 6px'>" . nl2br(esc_html($sg['dop'])) . "</p>";
+                if ($sg['imgs']) {
+                    echo "<div class='rs-foto-preview'>";
+                    foreach ($sg['imgs'] as $f) echo "<img src='" . esc_url($f['thumb']) . "' data-full='" . esc_attr($f['full']) . "' data-gallery='" . esc_attr($sg['gal']) . "' data-caption='' onclick='rsLightbox(this)' style='width:120px;height:90px;object-fit:cover;border-radius:3px;border:1px solid #ddd;cursor:pointer'>";
+                    echo "</div>";
+                }
+                echo "</div>";
             }
             echo "</div>";
         }
