@@ -2216,7 +2216,8 @@ function rs_kalendar_sc(array $atts): string {
                 $nazvy = count($nazvy_arr) > 1
                     ? implode(', ', array_slice($nazvy_arr, 0, -1)) . ' a ' . end($nazvy_arr)
                     : $nazvy_arr[0];
-                echo "<p style='margin:0 0 8px;padding:6px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:3px;color:#6d4c00'>V současné době nabízíme k pronájmu jen část prostor, konkrétně <strong>" . esc_html($nazvy) . "</strong>.</p>";
+                $je_jsou = count($nazvy_arr) === 1 ? 'je' : 'jsou';
+                echo "<p style='margin:0 0 8px;padding:6px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:3px;color:#6d4c00'>V současné době nabízíme k pronájmu jen část prostor. K dispozici {$je_jsou} jen <strong>" . esc_html($nazvy) . "</strong>.</p>";
             }
             $chips = [];
             if ($p_adresa) $chips[] = "📍 " . esc_html($p_adresa);
