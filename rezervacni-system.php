@@ -1493,6 +1493,19 @@ function rs_sekce_rezervace(): string {
             update_post_meta($rid, 'rs_stav', 'zrusena');
             rs_notifikuj_zruseni($rid);
             $zprava = rs_alert('Rezervace zrušena.');
+        } elseif ($action === 'zrusit_skupinu_admin') {
+            $sk_id = sanitize_text_field($_POST['skupina_id'] ?? '');
+            if ($sk_id) {
+                $sk_all = get_posts(['post_type'=>'rs_rezervace','numberposts'=>-1,'fields'=>'ids',
+                    'meta_query'=>[['key'=>'rs_skupina_id','value'=>$sk_id]]]);
+                $n = 0;
+                foreach ($sk_all as $sid) {
+                    if (get_post_meta($sid,'rs_stav',true) !== 'zrusena') {
+                        update_post_meta($sid,'rs_stav','zrusena'); $n++;
+                    }
+                }
+                $zprava = rs_alert("Série zrušena ({$n} termínů).");
+            }
         } elseif ($action === 'ulozit_ind_cenu' && $rid) {
             $ind = (float)str_replace(',','.',($_POST['ind_cena'] ?? 0));
             update_post_meta($rid,'rs_cena_individualni',$ind);
@@ -1509,13 +1522,9 @@ function rs_sekce_rezervace(): string {
         }
     }
 
-    // Filter
     $stav_filter = sanitize_key($_GET['rs_filter_stav'] ?? 'vse');
-    $args = ['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'DESC'];
-    if ($stav_filter !== 'vse') $args['meta_query'] = [['key'=>'rs_stav','value'=>$stav_filter]];
-    $rezervace = get_posts($args);
-
-    $detail_id = (int)($_GET['rs_rez_detail'] ?? 0);
+    $typ_filter  = ($_GET['rs_filter_typ'] ?? 'externi') === 'interni' ? 'interni' : 'externi';
+    $detail_id   = (int)($_GET['rs_rez_detail'] ?? 0);
 
     ob_start();
     echo "<h3 class='rs-section-title'>Správa rezervací</h3>{$zprava}";
@@ -1526,47 +1535,179 @@ function rs_sekce_rezervace(): string {
         return ob_get_clean();
     }
 
-    // Filter tabs
-    echo "<div style='display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap'>";
-    foreach (['vse'=>'Vše','cekajici'=>'Čekající','potvrzena'=>'Potvrzené','zrusena'=>'Zrušené'] as $k=>$l) {
-        $active = $stav_filter === $k ? 'rs-btn-primary' : 'rs-btn-secondary';
-        echo "<a href='" . esc_url(add_query_arg('rs_filter_stav',$k)) . "' class='rs-btn rs-btn-sm {$active}'>{$l}</a>";
+    // Typ filter (top level)
+    echo "<div style='display:flex;gap:6px;margin-bottom:10px'>";
+    foreach (['externi'=>'🌐 Externí', 'interni'=>'👥 Interní'] as $k=>$l) {
+        $cls = $typ_filter === $k ? 'rs-btn-primary' : 'rs-btn-secondary';
+        echo "<a href='" . esc_url(add_query_arg(['rs_filter_typ'=>$k,'rs_filter_stav'=>$stav_filter])) . "' class='rs-btn {$cls}'>{$l}</a>";
     }
     echo "</div>";
 
-    if (empty($rezervace)) {
-        echo rs_alert('Žádné rezervace.','info');
-        return ob_get_clean();
+    // Stav filter
+    echo "<div style='display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap'>";
+    foreach (['vse'=>'Vše','cekajici'=>'Čekající','potvrzena'=>'Potvrzené','zrusena'=>'Zrušené'] as $k=>$l) {
+        $cls = $stav_filter === $k ? 'rs-btn-primary' : 'rs-btn-secondary';
+        echo "<a href='" . esc_url(add_query_arg(['rs_filter_stav'=>$k,'rs_filter_typ'=>$typ_filter])) . "' class='rs-btn rs-btn-sm {$cls}'>{$l}</a>";
+    }
+    echo "</div>";
+
+    if ($typ_filter === 'externi') {
+        // ── EXTERNÍ: jednoduchá tabulka ──────────────────────────────────────
+        $args = ['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'DESC',
+            'meta_query'=>[['key'=>'rs_typ_rezervace','value'=>'externi']]];
+        if ($stav_filter !== 'vse') $args['meta_query'][] = ['key'=>'rs_stav','value'=>$stav_filter];
+        $rezervace = get_posts($args);
+
+        if (empty($rezervace)) { echo rs_alert('Žádné rezervace.','info'); return ob_get_clean(); }
+
+        echo "<table class='rs-table'><thead><tr><th>Žadatel</th><th>Objekt</th><th>Od</th><th>Do</th><th>Osob</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        foreach ($rezervace as $r) {
+            $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
+            $stav    = get_post_meta($r->ID,'rs_stav',true);
+            echo "<tr>";
+            echo "<td>" . esc_html(rs_rez_jmeno($r->ID)) . "</td>";
+            echo "<td>" . esc_html($prostor) . "</td>";
+            echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
+            echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
+            echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
+            echo "<td>" . rs_stav_badge($stav) . "</td>";
+            echo "<td>";
+            echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
+            if ($stav === 'cekajici') {
+                echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='potvrdit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-success'>✓ Potvrdit</button></form> ";
+            }
+            if ($stav !== 'zrusena') {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
+            }
+            echo "</td></tr>";
+        }
+        echo "</tbody></table>";
+
+    } else {
+        // ── INTERNÍ: skupinové zobrazení ─────────────────────────────────────
+        $all_rez = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,
+            'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'ASC',
+            'meta_query'=>[['key'=>'rs_typ_rezervace','value'=>'interni']]]);
+
+        // Rozdělit na série (mají skupina_id) a jednorázové
+        $groups  = [];
+        $singles = [];
+        foreach ($all_rez as $r) {
+            $sk = get_post_meta($r->ID,'rs_skupina_id',true);
+            if ($sk) $groups[$sk][] = $r;
+            else     $singles[]     = $r;
+        }
+
+        // Aplikovat stav_filter: skupiny zobrazit jen pokud mají aspoň 1 odpovídající
+        if ($stav_filter !== 'vse') {
+            $groups  = array_filter($groups,  fn($g) => (bool)array_filter($g, fn($r) => get_post_meta($r->ID,'rs_stav',true) === $stav_filter));
+            $singles = array_values(array_filter($singles, fn($r) => get_post_meta($r->ID,'rs_stav',true) === $stav_filter));
+        }
+
+        if (empty($groups) && empty($singles)) { echo rs_alert('Žádné rezervace.','info'); return ob_get_clean(); }
+
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást střediska</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+
+        $g_idx = 0;
+        foreach ($groups as $sk_id => $g_rez) {
+            $first   = $g_rez[0];
+            $last    = end($g_rez);
+            $nazev   = get_post_meta($first->ID,'rs_nazev',true) ?: '–';
+            $prostor = get_the_title((int)get_post_meta($first->ID,'rs_prostor_id',true));
+            $oddil   = get_post_meta($first->ID,'rs_oddil',true);
+            $uid     = (int)(get_post_meta($first->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($first->ID,'rs_wp_user_id',true));
+            $user    = get_userdata($uid);
+            $od_str  = rs_format_datum(get_post_meta($first->ID,'rs_datum_od',true));
+            $do_str  = rs_format_datum(get_post_meta($last->ID,'rs_datum_do',true));
+            $count   = count($g_rez);
+            $stavs   = array_map(fn($r) => get_post_meta($r->ID,'rs_stav',true), $g_rez);
+            $n_pot   = count(array_filter($stavs, fn($s) => $s === 'potvrzena'));
+            $n_cek   = count(array_filter($stavs, fn($s) => $s === 'cekajici'));
+            $n_zru   = count(array_filter($stavs, fn($s) => $s === 'zrusena'));
+            $has_act = ($n_pot + $n_cek) > 0;
+            $gid     = 'rsgrp' . $g_idx++;
+
+            echo "<tr style='background:#eef3ee;cursor:pointer' onclick='rsGrpToggle(\"" . esc_js($gid) . "\")'>";
+            echo "<td><span id='{$gid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev) . "</strong> <span style='color:#777;font-size:12px'>({$count}×)</span></td>";
+            echo "<td>" . esc_html($prostor) . "</td>";
+            echo "<td style='font-size:12px;white-space:nowrap'>" . esc_html($od_str) . "<br>– " . esc_html($do_str) . "</td>";
+            echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
+            echo "<td>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td style='white-space:nowrap'>";
+            if ($n_pot) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#1a5c2a;color:#fff;margin-right:2px'>{$n_pot}✓</span>";
+            if ($n_cek) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#f59e0b;color:#fff;margin-right:2px'>{$n_cek}⏳</span>";
+            if ($n_zru) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#aaa;color:#fff'>{$n_zru}✕</span>";
+            echo "</td><td>";
+            if ($has_act) {
+                echo "<form method='post' style='display:inline' onclick='event.stopPropagation()' onsubmit='return confirm(\"Zrušit celou sérii ({$count} termínů)?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='zrusit_skupinu_admin'><input type='hidden' name='skupina_id' value='" . esc_attr($sk_id) . "'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Série</button></form>";
+            }
+            echo "</td></tr>";
+
+            foreach ($g_rez as $r) {
+                $r_stav  = get_post_meta($r->ID,'rs_stav',true);
+                $r_od    = get_post_meta($r->ID,'rs_datum_od',true);
+                $opacity = $r_stav === 'zrusena' ? 'opacity:.5;' : '';
+                echo "<tr class='{$gid}' style='display:none;background:#f8faf8;{$opacity}'>";
+                echo "<td style='padding-left:26px;font-size:13px;color:#666'>↳ " . esc_html(substr($r_od,0,10)) . "</td>";
+                echo "<td></td>";
+                echo "<td style='font-size:12px'>" . esc_html($r_od) . "<br>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
+                echo "<td></td><td></td>";
+                echo "<td>" . rs_stav_badge($r_stav) . "</td>";
+                echo "<td>";
+                echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary' style='font-size:11px'>Detail</a> ";
+                if ($r_stav !== 'zrusena') {
+                    echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit tento termín?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                    echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                    echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' style='font-size:11px'>✕</button></form>";
+                }
+                echo "</td></tr>";
+            }
+        }
+
+        foreach ($singles as $r) {
+            $nazev   = get_post_meta($r->ID,'rs_nazev',true) ?: '–';
+            $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
+            $stav    = get_post_meta($r->ID,'rs_stav',true);
+            $oddil   = get_post_meta($r->ID,'rs_oddil',true);
+            $uid     = (int)(get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($r->ID,'rs_wp_user_id',true));
+            $user    = get_userdata($uid);
+            echo "<tr>";
+            echo "<td>" . esc_html($nazev) . "</td>";
+            echo "<td>" . esc_html($prostor) . "</td>";
+            echo "<td style='font-size:12px'>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
+            echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
+            echo "<td>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td>" . rs_stav_badge($stav) . "</td>";
+            echo "<td>";
+            echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
+            if ($stav !== 'zrusena') {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
+            }
+            echo "</td></tr>";
+        }
+
+        echo "</tbody></table>";
+        ?>
+        <script>
+        function rsGrpToggle(gid){
+            var rows=document.querySelectorAll('tr.'+gid);
+            var ico=document.getElementById(gid+'-ico');
+            var open=rows.length&&rows[0].style.display!=='none';
+            rows.forEach(function(r){r.style.display=open?'none':'';});
+            if(ico)ico.textContent=open?'▶':'▼';
+        }
+        </script>
+        <?php
     }
 
-    echo "<table class='rs-table'><thead><tr><th>Žadatel</th><th>Objekt</th><th>Od</th><th>Do</th><th>Osob</th><th>Typ</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
-    foreach ($rezervace as $r) {
-        $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
-        $typ_rez = get_post_meta($r->ID,'rs_typ_rezervace',true);
-        $stav    = get_post_meta($r->ID,'rs_stav',true);
-        echo "<tr>";
-        echo "<td>" . esc_html(rs_rez_jmeno($r->ID)) . "</td>";
-        echo "<td>" . esc_html($prostor) . "</td>";
-        echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_od',true)) . "</td>";
-        echo "<td>" . esc_html(get_post_meta($r->ID,'rs_datum_do',true)) . "</td>";
-        echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
-        echo "<td>" . ($typ_rez === 'interni' ? '<span class="rs-badge rs-badge-info">Interní</span>' : '<span class="rs-badge">Externí</span>') . "</td>";
-        echo "<td>" . rs_stav_badge($stav) . "</td>";
-        echo "<td>";
-        echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
-        if ($stav === 'cekajici') {
-            echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
-            echo "<input type='hidden' name='rs_rez_action' value='potvrdit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
-            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-success'>✓ Potvrdit</button></form> ";
-        }
-        if ($stav !== 'zrusena') {
-            echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
-            echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
-            echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
-        }
-        echo "</td></tr>";
-    }
-    echo "</tbody></table>";
     return ob_get_clean();
 }
 
