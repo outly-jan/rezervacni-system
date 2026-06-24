@@ -2433,8 +2433,8 @@ function rs_formular_sc(): string {
         rs_css();
         echo "<div class='rs-wrap'>";
         echo "<div style='padding:20px;background:#f8f9fa;border:1px solid #ddd;border-radius:6px;text-align:center'>";
-        echo "<p style='margin:0 0 12px;font-size:15px'>Jste přihlášen/a jako organizátor. Rezervace pro vlastní potřebu zadávejte přes <strong>Interní rezervace</strong> v administraci.</p>";
-        echo "<a href='" . esc_url($admin_url) . "#rs-interni' class='rs-btn rs-btn-primary'>Přejít do administrace</a>";
+        echo "<p style='margin:0 0 12px;font-size:15px'>Tento rezervační formulář je určený pro zájemce zvenčí. Ty patříš k vedení oddílů – použij interní formulář pro členy střediska.</p>";
+        echo "<a href='" . esc_url($admin_url) . "#rs-interni' class='rs-btn rs-btn-primary'>Interní formulář pro členy střediska</a>";
         echo "</div></div>";
         return ob_get_clean();
     }
