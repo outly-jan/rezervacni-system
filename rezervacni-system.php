@@ -2155,7 +2155,7 @@ function rs_kalendar_sc(array $atts): string {
         $typ = $p_typy[$p->ID];
         $lbl = "<span style='display:block;line-height:1.2'>" . esc_html($p->post_title) . "</span>";
         if ($typ) $lbl .= "<span style='display:block;font-size:11px;font-weight:400;opacity:" . ($a ? '.8' : '.65') . ";margin-top:2px'>" . esc_html($typ) . "</span>";
-        echo "<button data-rs-tab='" . (int)$p->ID . "' onclick='rsTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid " . ($a ? '#1a5c2a' : '#c8deca') . ";border-bottom:none;background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . ";text-align:left'>{$lbl}</button>";
+        echo "<button data-rs-tab='" . (int)$p->ID . "' onclick='rsTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:none;background:" . ($a ? '#f4f8f4' : '#1a5c2a') . ";color:" . ($a ? '#1a5c2a' : '#fff') . ";text-align:left'>{$lbl}</button>";
     }
     echo "</div>";
 
@@ -2488,9 +2488,9 @@ function rs_kalendar_sc(array $atts): string {
         document.querySelectorAll('[data-rs-tab-panel]').forEach(function(el) { el.style.display = 'none'; });
         document.querySelectorAll('[data-rs-tab]').forEach(function(btn) {
             var active = btn.getAttribute('data-rs-tab') == pid;
-            btn.style.background = active ? '#1a5c2a' : '#f4f8f4';
-            btn.style.color      = active ? '#fff'    : '#1a5c2a';
-            btn.style.borderColor = active ? '#1a5c2a' : '#c8deca';
+            btn.style.background = active ? '#f4f8f4' : '#1a5c2a';
+            btn.style.color      = active ? '#1a5c2a' : '#fff';
+            btn.style.borderColor = '#1a5c2a';
         });
         var panel = document.getElementById('rs-kal-panel-' + pid);
         if (panel) panel.style.display = '';
