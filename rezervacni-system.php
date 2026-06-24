@@ -2088,6 +2088,7 @@ function rs_kalendar_sc(array $atts): string {
         $p_dop    = get_post_meta($p->ID,'rs_doplnujici',true);
         $p_rezim  = get_post_meta($p->ID,'rs_ceny_rezim',true) ?: 'celek';
         $fmt      = fn(float $v): string => number_format($v, 0, ',', "\xc2\xa0");
+        $p_seg_ceny = [];
         if (!rs_ma_segmenty($p->ID) || $p_rezim === 'celek') {
             $za_os    = (float)get_post_meta($p->ID,'rs_cena_za_osobu',true);
             $za_min   = (float)get_post_meta($p->ID,'rs_cena_min',true);
@@ -2096,8 +2097,16 @@ function rs_kalendar_sc(array $atts): string {
             elseif ($za_min > 0)             $p_cena = 'Paušálně ' . $fmt($za_min) . '&nbsp;Kč';
             else                             $p_cena = '';
         } else {
-            $mins = array_filter(array_map(fn($s) => (float)get_post_meta($s->ID,'rs_cena_min',true), $items));
-            $p_cena = $mins ? 'od ' . $fmt((float)min($mins)) . '&nbsp;Kč/segment' : '';
+            $p_cena = '';
+            foreach ($items as $s) {
+                $s_os  = (float)get_post_meta($s->ID,'rs_cena_za_osobu',true);
+                $s_min = (float)get_post_meta($s->ID,'rs_cena_min',true);
+                if ($s_os > 0 && $s_min > 0)  $sc = $fmt($s_os) . '&nbsp;Kč/os., min. ' . $fmt($s_min) . '&nbsp;Kč';
+                elseif ($s_os > 0)             $sc = $fmt($s_os) . '&nbsp;Kč/os.';
+                elseif ($s_min > 0)            $sc = 'Paušálně ' . $fmt($s_min) . '&nbsp;Kč';
+                else                           $sc = '';
+                if ($sc) $p_seg_ceny[] = '💰 <strong>' . esc_html($s->post_title) . ':</strong> ' . $sc;
+            }
         }
         if ($p_popis || $p_adresa || $p_gps || $p_kap || $p_roz || $p_cena || $p_dop) {
             echo "<div style='margin-bottom:12px;font-size:13px;color:#444;background:#f8faf8;border:1px solid #d4e8d7;border-radius:4px;padding:12px 14px'>";
@@ -2111,6 +2120,7 @@ function rs_kalendar_sc(array $atts): string {
             if ($p_kap) $chips[] = "🛏 <strong>" . $p_kap . "&nbsp;míst</strong> na spaní <span style='color:#888'>(přibližný počet)</span>";
             if ($p_roz) $chips[] = "📐 <strong>" . $p_roz . "&nbsp;m²</strong> <span style='color:#888'>(místnosti ke spaní, bez společných prostor)</span>";
             if ($p_cena) $chips[] = "💰 " . $p_cena;
+            foreach ($p_seg_ceny as $sc) $chips[] = $sc;
             if ($chips) {
                 echo "<div style='display:flex;flex-wrap:wrap;gap:4px 20px'>";
                 foreach ($chips as $chip) echo "<span>" . $chip . "</span>";
