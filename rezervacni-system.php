@@ -3284,7 +3284,7 @@ function rs_sekce_napoveda(): string {
 <ul>
   <li>Zadat interní akci oddílu (výprava, oddílová rada, přespávačka apod.) přímo bez schvalovacího procesu.</li>
   <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Systém automaticky přeskočí státní svátky a prázdniny (lze volitelně vypnout), takže není třeba výjimky zadávat ručně. Všechny termíny série se v přehledu zobrazí sbalené pod jedno označení, aby tabulku nepřeplňovaly.</li>
-  <li>Editovat nebo zrušit jednotlivé termíny, případně celou sérii najednou.</li>
+  <li>Zrušit jednotlivé termíny nebo celou sérii najednou – každý vedoucí ale může rušit jen rezervace, které sám vytvořil, ne rezervace ostatních vedoucích.</li>
 </ul>
 
 <hr style="margin:24px 0">
