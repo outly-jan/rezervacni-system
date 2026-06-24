@@ -1195,7 +1195,7 @@ function rs_sekce_ceny(): string {
     $sel_pid  = (int)($_POST['ceny_prostor_id'] ?? ($_GET['ceny_pid'] ?? ($prostory[0]->ID ?? 0)));
 
     ob_start();
-    echo "<h3 class='rs-section-title'>Ceník objektů</h3>{$zprava}";
+    echo "<h3 class='rs-section-title'>Ceník pronájmu objektů</h3>{$zprava}";
     echo "<div class='rs-card'>";
     echo "<form method='post'>" . wp_nonce_field('rs_ceny','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_ceny_action' value='ulozit'>";
