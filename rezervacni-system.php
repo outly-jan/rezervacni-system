@@ -3260,57 +3260,54 @@ function rs_sekce_napoveda(): string {
     ob_start(); ?>
 <div style="max-width:820px;line-height:1.7;font-size:15px">
 
-<h2 style="margin-top:0">Rezervační systém – Chata Chlumec</h2>
-<p>Tato aplikace slouží ke správě rezervací objektů (hlavní chata, zázemí apod.). Umožňuje přijímat žádosti od veřejnosti i plánovat vlastní interní akce oddílu – vše na jednom místě, přehledně a bez nutnosti používat e-mail nebo tabulky.</p>
+<p style="font-size:17px;font-weight:600;margin-top:0">Středisková aplikace pro rezervaci prostor</p>
+<p>Tato aplikace slouží k rezervaci objektů (zatím skautský dům a Smetánka) a jejich částí (místnosti, chatky). Umožňuje přijímat žádosti od veřejnosti i plánovat vlastní interní akce. Všichni tedy na jednom místě uvidíme, kdy kde je nebo není v našich prostorách místo.</p>
 
 <hr style="margin:24px 0">
 
-<h3>🌐 Co vidí veřejnost (nepřihlášení návštěvníci)</h3>
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Co vidí veřejnost (nepřihlášení návštěvníci)</p>
 <ul>
-  <li><strong>Kalendář obsazenosti</strong> – přehledný měsíční kalendář zobrazující, kdy jsou objekty volné a kdy obsazené. Potvrzené a čekající rezervace jsou barevně odlišeny.</li>
-  <li><strong>Formulář pro poptávku</strong> – návštěvník vyplní své kontaktní údaje, zvolí požadovaný termín a objekt, uvede počet osob a odešle žádost. Ta pak čeká na schválení správcem.</li>
+  <li><strong>Kalendář obsazenosti</strong> – přehledný měsíční kalendář zobrazující, kdy jsou objekty zcela nebo částečně obsazené a kdy volné. Veřejnost však nevidí žádné detaily rezervací. Odlišeny jsou potvrzené a čekající rezervace.</li>
+  <li><strong>Formulář pro poptávku prostor</strong> – návštěvník vyplní své kontaktní údaje, zvolí požadovaný termín (aplikace automaticky kontroluje dostupnost) a objekt, uvede počet osob a odešle žádost. Ta pak čeká na schválení správcem.
+    <ul style="margin-top:6px">
+      <li>Po odeslání žadatel obdrží e-mail s potvrzením přijetí žádosti a <strong>jedinečným odkazem pro správu své rezervace</strong>. Přes tento odkaz může sledovat stav rezervace (čeká / potvrzena / zrušena) a v případě potvrzení i vyplnit seznam ubytovaných osob. Žádost ani termín přes tento odkaz měnit nelze – změny řeší správce.</li>
+      <li>Jakmile správce rezervaci potvrdí nebo zamítne, přijde žadateli automatický e-mail s výsledkem a orientační cenou.</li>
+      <li>Je-li zapnuta funkce <strong>ubytovacího poplatku (vzdušného)</strong>, je žadatel po potvrzení rezervace vyzván k vyplnění jmen a dat narození všech ubytovaných osob. Upomínkový e-mail se automaticky odešle 7 dní a znovu 1 den před začátkem pobytu, pokud seznam dosud nebyl vyplněn.</li>
+    </ul>
+  </li>
 </ul>
 
 <hr style="margin:24px 0">
 
-<h3>👥 Vedoucí (role Author a výše)</h3>
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Vedení oddílů</p>
 <p>Vedoucí mají přístup k záložce <strong>Interní rezervace</strong>, kde mohou:</p>
 <ul>
-  <li>Zadat interní akci oddílu (výprava, schůzka, soustředění apod.) přímo bez schvalovacího procesu.</li>
-  <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Všechny termíny se pak v přehledu zobrazí sbalené pod jedno označení série, aby tabulku nepřeplňovaly.</li>
+  <li>Zadat interní akci oddílu (výprava, oddílová rada, přespávačka apod.) přímo bez schvalovacího procesu.</li>
+  <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Systém automaticky přeskočí státní svátky a prázdniny (lze volitelně vypnout), takže není třeba výjimky zadávat ručně. Všechny termíny série se v přehledu zobrazí sbalené pod jedno označení, aby tabulku nepřeplňovaly.</li>
   <li>Editovat nebo zrušit jednotlivé termíny, případně celou sérii najednou.</li>
 </ul>
 
 <hr style="margin:24px 0">
 
-<h3>📋 Správce rezervací</h3>
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Správce rezervací (Vráťa)</p>
 <p>Správce má navíc záložku <strong>Správa rezervací</strong>, kde:</p>
 <ul>
   <li>Vidí všechny rezervace rozdělené na <strong>Externí</strong> (žádosti od veřejnosti) a <strong>Interní</strong> (akce oddílu).</li>
   <li>Může rezervaci <strong>potvrdit</strong> nebo <strong>zamítnout</strong> – žadatel je o změně informován automatickým e-mailem.</li>
   <li>U externích rezervací vidí kontaktní údaje žadatele, termín, počet osob a stav rezervace.</li>
+  <li>Cena je automaticky vypočtena podle ceníku a zobrazena u každé rezervace. Správce ji může v případě potřeby individuálně upravit přímo v detailu rezervace.</li>
   <li>Může kdykoli zobrazit detail rezervace, upravit ji nebo ji zrušit.</li>
 </ul>
 
 <hr style="margin:24px 0">
 
-<h3>⚙️ Administrátor systému</h3>
-<p>Administrátor má přístup ke všem záložkám a nastavením:</p>
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Administrátor systému</p>
+<p>Administrátor nastavuje:</p>
 <ul>
-  <li><strong>Typy objektů</strong> – definuje kategorie (např. „Chata", „Kemp"), ke každé může přidat popis a fotografii.</li>
-  <li><strong>Objekty</strong> – spravuje konkrétní pronajímatelné prostory, jejich kapacitu, popis a přiřazení k typu.</li>
-  <li><strong>Prázdniny & Svátky</strong> – nastavuje dny, kdy systém upozorní nebo zablokuje rezervace (státní svátky, tábor apod.).</li>
-  <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za objekt podle sezóny nebo typu pobytu (noc, den, víkend…).</li>
-  <li><strong>Nastavení</strong> – obecná konfigurace systému (kontaktní e-mail, texty na webu, podmínky rezervace apod.).</li>
-</ul>
-
-<hr style="margin:24px 0">
-
-<h3>📌 Tipy a zkratky</h3>
-<ul>
-  <li>Po odeslání formuláře se stránka vrátí na stejnou pozici, kde jsi byl – nemusíš scrollovat zpět.</li>
-  <li>Aktivní záložka se pamatuje i po obnovení stránky – pracuj pohodlně bez ztráty kontextu.</li>
-  <li>Sériové rezervace lze rozbalit kliknutím na řádek skupiny – pak jsou vidět jednotlivé termíny s možností editace.</li>
+  <li><strong>Typy objektů</strong> – definuje kategorie (např. skautský dům, příměstský areál, tábořiště atp.).</li>
+  <li><strong>Objekty</strong> – spravuje konkrétní pronajímatelné prostory, jejich kapacitu, popis (rozloha, kapacita osob, adresa a GPS souřadnice – ty se zobrazují jako přímý proklik do mapy na mapy.cz) a přiřazení k typu. Každý objekt nebo jeho část lze dočasně vypnout z nabídky pro veřejnost – buď na konkrétní časové rozmezí, nebo do odvolání.</li>
+  <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za nocleh a pobyt. Je-li zapnuta funkce vzdušného (ubytovacího poplatku), nastaví se zde sazby podle věkových kategorií ubytovaných.</li>
+  <li><strong>Nastavení</strong> – další obecná konfigurace systému (parametry notifikačních e-mailů atp.).</li>
 </ul>
 
 </div>
