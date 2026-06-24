@@ -2211,6 +2211,13 @@ function rs_kalendar_sc(array $atts): string {
         if ($p_popis || $p_adresa || $p_gps || $p_kap || $p_roz || $p_cena || $p_dop) {
             echo "<div style='margin-bottom:12px;font-size:13px;color:#444;background:#f8faf8;border:1px solid #d4e8d7;border-radius:4px;padding:12px 14px'>";
             if ($p_popis) echo "<p style='margin:0 0 8px'>" . nl2br(esc_html($p_popis)) . "</p>";
+            if (rs_ma_segmenty($p->ID) && count($items_ext) < count($items) && !empty($items_ext)) {
+                $nazvy_arr = array_map(fn($s) => $s->post_title, $items_ext);
+                $nazvy = count($nazvy_arr) > 1
+                    ? implode(', ', array_slice($nazvy_arr, 0, -1)) . ' a ' . end($nazvy_arr)
+                    : $nazvy_arr[0];
+                echo "<p style='margin:0 0 8px;padding:6px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:3px;color:#6d4c00'>V současné době nabízíme k pronájmu jen část prostor, konkrétně <strong>" . esc_html($nazvy) . "</strong>.</p>";
+            }
             $chips = [];
             if ($p_adresa) $chips[] = "📍 " . esc_html($p_adresa);
             if ($p_gps) {
