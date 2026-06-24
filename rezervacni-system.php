@@ -3306,7 +3306,7 @@ function rs_sekce_napoveda(): string {
 <ul>
   <li><strong>Typy objektů</strong> – definuje kategorie (např. skautský dům, příměstský areál, tábořiště atp.).</li>
   <li><strong>Objekty</strong> – spravuje konkrétní pronajímatelné prostory, jejich kapacitu, popis (rozloha, kapacita osob, adresa a GPS souřadnice – ty se zobrazují jako přímý proklik do mapy na mapy.cz), fotografie a přiřazení k typu. Každý objekt nebo jeho část lze dočasně vypnout z nabídky pro veřejnost – buď na konkrétní časové rozmezí, nebo do odvolání.</li>
-  <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za nocleh a pobyt. Je-li zapnuta funkce vzdušného (ubytovacího poplatku), nastaví se zde sazby podle věkových kategorií ubytovaných.</li>
+  <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za nocleh a pobyt. Je-li zapnuta funkce vzdušného (ubytovacího poplatku), nastaví se zde sazby podle věkových kategorií ubytovaných. Systém počítá i s tím, že případná městská vyhláška může určité osoby od poplatku osvobodit (například dospělý doprovod) – taková kategorie se označí jako neplatící a do výpočtu se nezapočítá.</li>
   <li><strong>Nastavení</strong> – další obecná konfigurace systému (parametry notifikačních e-mailů atp.).</li>
 </ul>
 
