@@ -2214,7 +2214,7 @@ function rs_kalendar_sc(array $atts): string {
             $chips = [];
             if ($p_adresa) $chips[] = "📍 " . esc_html($p_adresa);
             if ($p_gps) {
-                $gps_url = 'https://maps.google.com/?q=' . rawurlencode($p_gps);
+                $gps_url = 'https://mapy.cz/zakladni?q=' . rawurlencode($p_gps);
                 $chips[] = "🗺️ <a href='" . esc_url($gps_url) . "' target='_blank' rel='noopener' style='color:#1a5c2a'>" . esc_html($p_gps) . "</a>";
             }
             if ($p_kap) $chips[] = "🛏 <strong>" . $p_kap . "&nbsp;míst</strong> na spaní <span style='color:#888'>(přibližný počet)</span>";
