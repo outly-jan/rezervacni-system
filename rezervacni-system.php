@@ -319,7 +319,14 @@ function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $no
     return implode("\n", $lines);
 }
 
-define('RS_PODPIS', "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černého havrana");
+function rs_podpis(): string {
+    $base  = "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černého havrana";
+    $jmeno = get_option('rs_stredisko_kontakt_jmeno', '');
+    $mobil = get_option('rs_stredisko_kontakt_mobil', '');
+    $email = get_option('rs_stredisko_kontakt_email', '');
+    $radky = array_filter([$jmeno, $mobil, $email]);
+    return $radky ? $base . "\n" . implode("\n", $radky) : $base;
+}
 
 function rs_notifikuj_nova(int $id) {
     $email      = get_post_meta($id, 'rs_email', true);
@@ -334,7 +341,8 @@ function rs_notifikuj_nova(int $id) {
     $url        = rs_sprava_url($token);
 
     if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$label}",
-        "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . RS_PODPIS);
+        "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci prostory {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . rs_podpis(),
+        get_option('rs_stredisko_kontakt_email', ''));
 
     $prehled = rs_rez_prehled($prostor_id, $od_raw, $do_raw, $id);
     foreach (rs_spravci_emaily() as $se)
@@ -357,7 +365,8 @@ function rs_notifikuj_potvrzeni(int $id) {
     $cena       = (float)get_post_meta($id, 'rs_cena_celkem', true);
     $token      = get_post_meta($id, 'rs_token', true);
     rs_mail($email, "Rezervace potvrzena – {$label}",
-        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
+        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
+        get_option('rs_stredisko_kontakt_email', ''));
 }
 
 function rs_notifikuj_zruseni(int $id) {
@@ -369,7 +378,8 @@ function rs_notifikuj_zruseni(int $id) {
     $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
     $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
     rs_mail($email, "Rezervace zrušena – {$label}",
-        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . RS_PODPIS);
+        "Dobrý den,\n\nvaše rezervace prostory {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+        get_option('rs_stredisko_kontakt_email', ''));
 }
 
 // Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
@@ -390,7 +400,8 @@ function rs_cron_upozorneni_ucastnici() {
         $od      = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
         $token   = get_post_meta($id, 'rs_token', true);
         rs_mail($email, "Upozornění: vyplňte seznam ubytovaných – {$prostor}",
-            "Dobrý den,\n\nvaše rezervace prostory {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . " ({$od}).\n\nProsíme vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . rs_sprava_url($token) . "\n\n" . RS_PODPIS);
+            "Dobrý den,\n\nvaše rezervace prostory {$prostor} začíná za {$days} " . ($days === 1 ? 'den' : 'dní') . " ({$od}).\n\nProsíme vyplňte seznam ubytovaných osob pro účely ubytovacího poplatku:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
+            get_option('rs_stredisko_kontakt_email', ''));
     }
 }
 
@@ -1319,6 +1330,9 @@ function rs_sekce_nastaveni(): string {
         update_option('rs_formular_url',   esc_url_raw($_POST['formular_url'] ?? ''));
         update_option('rs_doplnujici_info_ext', wp_kses_post($_POST['doplnujici_info_ext'] ?? ''));
         update_option('rs_doplnujici_info_int', wp_kses_post($_POST['doplnujici_info_int'] ?? ''));
+        update_option('rs_stredisko_kontakt_jmeno', sanitize_text_field($_POST['stredisko_kontakt_jmeno'] ?? ''));
+        update_option('rs_stredisko_kontakt_mobil', sanitize_text_field($_POST['stredisko_kontakt_mobil'] ?? ''));
+        update_option('rs_stredisko_kontakt_email', sanitize_email($_POST['stredisko_kontakt_email'] ?? ''));
         // Vzdušné kategorie
         $kategorie = [];
         $kat_od  = (array)($_POST['kat_od']  ?? []);
@@ -1341,6 +1355,9 @@ function rs_sekce_nastaveni(): string {
     $dop_info_ext = get_option('rs_doplnujici_info_ext', get_option('rs_doplnujici_info', ''));
     $dop_info_int = get_option('rs_doplnujici_info_int', '');
     $formular_url_opt = get_option('rs_formular_url', '');
+    $kont_jmeno  = get_option('rs_stredisko_kontakt_jmeno', '');
+    $kont_mobil  = get_option('rs_stredisko_kontakt_mobil', '');
+    $kont_email  = get_option('rs_stredisko_kontakt_email', '');
 
     ob_start();
     echo "<h3 class='rs-section-title'>Nastavení</h3>{$zprava}";
@@ -1358,6 +1375,15 @@ function rs_sekce_nastaveni(): string {
     echo "<div class='rs-form-group'><label>Pro externí rezervace <span style='font-weight:normal;font-size:12px;color:#666'>(zobrazí se na frontendu pod formulářem a v kalendáři)</span></label><textarea name='doplnujici_info_ext' rows='5' style='max-width:100%'>" . esc_textarea($dop_info_ext) . "</textarea></div>";
     echo "<div class='rs-form-group'><label>Pro interní rezervace <span style='font-weight:normal;font-size:12px;color:#666'>(zobrazí se správcům ve formuláři Interní rezervace)</span></label><textarea name='doplnujici_info_int' rows='5' style='max-width:100%'>" . esc_textarea($dop_info_int) . "</textarea></div>";
     echo "</div>";
+
+    // Kontaktní osoba střediska
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Kontaktní osoba střediska</h4>";
+    echo "<p style='font-size:13px;color:#555;margin-bottom:12px'>Údaje se zobrazí v podpisu e-mailů odesílaných žadatelům (potvrzení, zrušení, …). E-mail bude nastaven jako Reply-To.</p>";
+    echo "<div style='display:flex;flex-wrap:wrap;gap:8px 20px'>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:180px'><label>Jméno a příjmení</label><input type='text' name='stredisko_kontakt_jmeno' value='" . esc_attr($kont_jmeno) . "' placeholder='Jan Novák'></div>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:160px'><label>Mobil</label><input type='tel' name='stredisko_kontakt_mobil' value='" . esc_attr($kont_mobil) . "' placeholder='+420 731 123 456'></div>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:200px'><label>E-mail</label><input type='email' name='stredisko_kontakt_email' value='" . esc_attr($kont_email) . "' placeholder='kontakt@skautchlumec.cz'></div>";
+    echo "</div></div>";
 
     // Vzdušné
     echo "<div class='rs-card'><h4 class='rs-card-title'>Ubytovací poplatek – vzdušné</h4>";
@@ -2138,13 +2164,14 @@ function rs_kalendar_sc(array $atts): string {
         echo "<h4 style='color:#1a5c2a;margin-bottom:2px'>" . esc_html($p->post_title) . "</h4>";
         if ($p_typy[$p->ID]) echo "<p style='margin:0 0 10px;font-size:13px;color:#666'>" . esc_html($p_typy[$p->ID]) . "</p>";
         $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
+        $items_ext = array_values(array_filter($items, fn($s) => !rs_je_ext_vypnuto($s->ID)));
 
         // Info blok pod názvem prostory
         $p_popis  = trim($p->post_content);
         $p_adresa = get_post_meta($p->ID,'rs_adresa',true);
         $p_gps    = get_post_meta($p->ID,'rs_gps',true);
-        $p_kap    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $items));
-        $p_roz    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_rozloha',true), $items));
+        $p_kap    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $items_ext));
+        $p_roz    = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_rozloha',true), $items_ext));
         $p_dop    = get_post_meta($p->ID,'rs_doplnujici',true);
         $p_rezim  = get_post_meta($p->ID,'rs_ceny_rezim',true) ?: 'celek';
         $fmt      = fn(float $v): string => number_format($v, 0, ',', "\xc2\xa0");
@@ -2160,7 +2187,7 @@ function rs_kalendar_sc(array $atts): string {
         } else {
             $p_cena  = '';
             $sc_map  = []; // [seg_id => ['title'=>..., 'cena'=>...]]
-            foreach ($items as $s) {
+            foreach ($items_ext as $s) {
                 $s_os  = (float)get_post_meta($s->ID,'rs_cena_za_osobu',true);
                 $s_min = (float)get_post_meta($s->ID,'rs_cena_min',true);
                 if ($s_os > 0 && $s_min > 0)  $sc = $fmt($s_os) . '&nbsp;Kč/os., min. ' . $fmt($s_min) . '&nbsp;Kč';
