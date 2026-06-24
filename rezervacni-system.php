@@ -656,7 +656,7 @@ function rs_sekce_prostory(): string {
         $fotky = $edit ? (array)get_post_meta($edit->ID,'rs_fotky',true) : [];
         echo rs_foto_field('prostor', $fotky);
 
-        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit změny' : '➕ Přidat prostor') . "</button>";
+        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit ? '💾 Uložit prostoru' : '➕ Přidat prostor') . "</button>";
         echo "<a href='" . esc_url($url_base) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
         echo "</div></form></div>";
     } else {
@@ -690,7 +690,7 @@ function rs_sekce_prostory(): string {
         echo "</div>";
         echo "<div class='rs-form-group'><label>Doplňující informace</label><textarea name='segment_doplnujici' rows='2'>{$s_dop}</textarea></div>";
         echo rs_foto_field('segment', $s_fotky);
-        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>" . ($edit_seg ? '💾 Uložit segment' : '➕ Přidat segment') . "</button>";
+        echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary'>💾 Uložit segment</button>";
         if ($edit_seg) echo "<a href='" . esc_url(remove_query_arg('rs_edit_seg')) . "' class='rs-btn rs-btn-secondary'>Zrušit</a>";
         echo "</div></form>";
 
