@@ -1909,13 +1909,14 @@ function rs_sekce_interni(): string {
     echo "<div id='rs-int-panel-jedno'>";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='int_cely_den' onchange='rsCelyDen(this,\"int\")' style='width:auto'> Celý den</label></div>";
     echo "<div id='rs-int-cas-wrap'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900' onchange='var d=document.querySelector(\"[name=int_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900' onchange='var d=document.querySelector(\"[name=int_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsIntCheckVolno()'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900' onchange='rsIntCheckVolno()'></div>";
     echo "</div></div>";
     echo "<div id='rs-int-den-wrap' style='display:none'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den' onchange='var d=document.querySelector(\"[name=int_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}'></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='int_datum_do_den'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den' onchange='var d=document.querySelector(\"[name=int_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsIntCheckVolno()'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='date' name='int_datum_do_den' onchange='rsIntCheckVolno()'></div>";
     echo "</div></div>";
+    echo "<div id='rs-int-avail' style='margin:4px 0'></div>";
     echo "</div>";
 
     // 4b) Panel: Opakující se (skrytý)
@@ -2001,12 +2002,13 @@ function rs_sekce_interni(): string {
         list.innerHTML = '';
         if(rsSegData[pid]){
             rsSegData[pid].forEach(function(s){
-                list.innerHTML += '<label style="display:block;margin-bottom:4px"><input type="checkbox" name="int_segmenty[]" value="'+s.id+'"> '+s.nazev+'</label>';
+                list.innerHTML += '<label style="display:block;margin-bottom:4px"><input type="checkbox" name="int_segmenty[]" value="'+s.id+'" onchange="rsIntCheckVolno()"> '+s.nazev+'</label>';
             });
             wrap.style.display = '';
         } else {
             wrap.style.display = 'none';
         }
+        rsIntCheckVolno();
     }
     function rsIntMode(mode){
         var jedno = document.getElementById('rs-int-panel-jedno');
@@ -2014,6 +2016,35 @@ function rs_sekce_interni(): string {
         jedno.style.display = mode === 'jednorazova' ? '' : 'none';
         opak.style.display  = mode === 'opakujici'   ? '' : 'none';
         document.querySelectorAll('#rs-int-panel-jedno input[type=datetime-local]').forEach(function(i){ i.required = mode === 'jednorazova'; });
+    }
+    var rsIntNonce = '<?php echo wp_create_nonce('rs_public'); ?>';
+    var rsIntAjaxUrl = '<?php echo admin_url('admin-ajax.php'); ?>';
+    var rsIntCheckVolnoTimer = null;
+    function rsIntCheckVolno(){
+        clearTimeout(rsIntCheckVolnoTimer);
+        rsIntCheckVolnoTimer = setTimeout(function(){
+            var pid = document.querySelector('[name=int_prostor_id]') ? document.querySelector('[name=int_prostor_id]').value : '';
+            var el  = document.getElementById('rs-int-avail');
+            if(!el) return;
+            if(!pid){ el.innerHTML=''; return; }
+            var cd  = document.querySelector('[name=int_cely_den]') && document.querySelector('[name=int_cely_den]').checked;
+            var od  = cd ? (document.querySelector('[name=int_datum_od_den]')||{}).value : (document.querySelector('[name=int_datum_od]')||{}).value;
+            var do_ = cd ? (document.querySelector('[name=int_datum_do_den]')||{}).value : (document.querySelector('[name=int_datum_do]')||{}).value;
+            if(!od||!do_){ el.innerHTML=''; return; }
+            el.innerHTML='<span style="color:#888">Kontroluji dostupnost…</span>';
+            var segs = Array.from(document.querySelectorAll('[name="int_segmenty[]"]:checked')).map(function(c){return '&seg_ids[]='+c.value;}).join('');
+            fetch(rsIntAjaxUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                body:'action=rs_check_volno&nonce='+rsIntNonce+'&prostor_id='+encodeURIComponent(pid)+'&datum_od='+encodeURIComponent(od)+'&datum_do='+encodeURIComponent(do_)+'&cely_den='+(cd?'1':'')+segs})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if(!d.success||d.data===null){el.innerHTML='';return;}
+                if(d.data.volno){
+                    el.innerHTML='<span style="color:#2e7d32;font-weight:500">✓ Termín je volný</span>';
+                } else {
+                    el.innerHTML='<span style="color:#c62828;font-weight:500">✗ Termín není volný – vyberte jiný</span>';
+                }
+            }).catch(function(){el.innerHTML='';});
+        }, 400);
     }
     </script>
     <?php
@@ -2805,7 +2836,7 @@ function rs_formular_sc(): string {
     echo "<div style='display:flex;align-items:center;border:1px solid #ccc;border-radius:3px;padding:0 4px 0 8px;background:#f5f5f5'><span style='color:#555;font-size:13px'>+</span><input type='text' name='fyzicka_predvolba'" . $ov('fyzicka_predvolba','420') . " pattern='[0-9]{1,4}' maxlength='4' style='border:none;outline:none;background:transparent;width:38px;padding:7px 2px;font-size:14px' required data-rs-cond title='Mezinárodní předvolba (např. 420 pro ČR)'></div>";
     echo "<input type='tel' name='fyzicka_mobil'" . $ov('fyzicka_mobil') . " pattern='[0-9]{9}' maxlength='9' minlength='9' placeholder='123456789' required data-rs-cond style='flex:1' title='9 číslic bez předvolby'>";
     echo "</div></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email'" . $ov('fyzicka_email') . " required data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='fyzicka_email'" . $ov('fyzicka_email') . " pattern='[^@\\s]+@[^@\\s]+\\.[^@\\s]+' required data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // fyzicka
 
@@ -2824,7 +2855,7 @@ function rs_formular_sc(): string {
     echo "<div style='display:flex;align-items:center;border:1px solid #ccc;border-radius:3px;padding:0 4px 0 8px;background:#f5f5f5'><span style='color:#555;font-size:13px'>+</span><input type='text' name='pravnicka_predvolba'" . $ov('pravnicka_predvolba','420') . " pattern='[0-9]{1,4}' maxlength='4' style='border:none;outline:none;background:transparent;width:38px;padding:7px 2px;font-size:14px' data-rs-cond title='Mezinárodní předvolba'></div>";
     echo "<input type='tel' name='pravnicka_mobil'" . $ov('pravnicka_mobil') . " pattern='[0-9]{9}' maxlength='9' minlength='9' placeholder='123456789' data-rs-cond style='flex:1' title='9 číslic bez předvolby'>";
     echo "</div></div>";
-    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email'" . $ov('pravnicka_email') . " data-rs-cond></div>";
+    echo "<div class='rs-form-group'><label>E-mail *</label><input type='email' name='pravnicka_email'" . $ov('pravnicka_email') . " pattern='[^@\\s]+@[^@\\s]+\\.[^@\\s]+' data-rs-cond></div>";
     echo "</div>";
     echo "</div>"; // pravnicka
     echo "</div>"; // card
@@ -2932,6 +2963,8 @@ function rs_formular_sc(): string {
         }, 400);
     }
     document.addEventListener('DOMContentLoaded', function(){
+        var errEl = document.querySelector('.rs-alert-error');
+        if(errEl){ errEl.scrollIntoView({behavior:'smooth', block:'center'}); }
         rsRezTypChange('<?php echo esc_js($old_typ); ?>');
         <?php if ($old_prostor): ?>
         rsExtProstorChange(<?php echo $old_prostor; ?>);
