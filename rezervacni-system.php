@@ -1946,7 +1946,7 @@ function rs_sekce_interni(): string {
 
     // Přehled rezervací
     if ($rezervace) {
-        echo "<div class='rs-card'><h4 class='rs-card-title'>Přehled interních rezervací</h4>";
+        echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($is_spravce ? 'Přehled interních rezervací' : 'Moje interní rezervace') . "</h4>";
         echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Skupina</th><th>Akce</th></tr></thead><tbody>";
 
         foreach ($rezervace as $r) {
