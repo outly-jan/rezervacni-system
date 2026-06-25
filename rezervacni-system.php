@@ -2789,6 +2789,7 @@ function rs_formular_sc(): string {
 
     if ($hotovo) {
         echo $zprava;
+        echo "<div style='margin-top:16px;text-align:center'><a href='https://www.skautchlumec.cz/rezervace-prostor/' class='rs-btn rs-btn-secondary'>← Zpět na rezervace</a></div>";
         echo "</div>";
         return ob_get_clean();
     }
