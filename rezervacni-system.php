@@ -2165,6 +2165,36 @@ function rs_sekce_interni(): string {
             if(ico)ico.textContent=open?'▶':'▼';
         }
     }
+    if(typeof rsCelyDen==='undefined'){
+        function rsCelyDen(cb, prefix){
+            var casWrap=document.getElementById('rs-'+prefix+'-cas-wrap');
+            var denWrap=document.getElementById('rs-'+prefix+'-den-wrap');
+            if(!casWrap||!denWrap)return;
+            var dtOd=casWrap.querySelector('[name='+prefix+'_datum_od]');
+            var dtDo=casWrap.querySelector('[name='+prefix+'_datum_do]');
+            var dOd=denWrap.querySelector('[name='+prefix+'_datum_od_den]');
+            var dDo=denWrap.querySelector('[name='+prefix+'_datum_do_den]');
+            if(cb.checked){
+                if(dtOd&&dtOd.value)dOd.value=dtOd.value.split('T')[0];
+                if(dtDo&&dtDo.value)dDo.value=dtDo.value.split('T')[0];
+                casWrap.style.display='none';
+                denWrap.style.display='';
+                if(dtOd)dtOd.required=false;
+                if(dtDo)dtDo.required=false;
+                if(dOd)dOd.required=true;
+                if(dDo)dDo.required=true;
+            }else{
+                if(dOd&&dOd.value)dtOd.value=dOd.value+'T00:00';
+                if(dDo&&dDo.value)dtDo.value=dDo.value+'T00:00';
+                casWrap.style.display='';
+                denWrap.style.display='none';
+                if(dtOd)dtOd.required=true;
+                if(dtDo)dtDo.required=true;
+                if(dOd)dOd.required=false;
+                if(dDo)dDo.required=false;
+            }
+        }
+    }
     var rsSegData = <?php echo json_encode($seg_data); ?>;
     function rsIntProstorChange(pid){
         var wrap = document.getElementById('rs-int-seg-wrap');
