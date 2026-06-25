@@ -2447,7 +2447,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span>⏳ Čeká na schválení</span>";
         echo "</div>";
         $btn_href = $form_url ? esc_url($form_url) : '#';
-        echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat objekty</a></div>";
+        echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat prostory</a></div>";
 
         // Fotky prostory a segmentů s lightbox podporou
         $fotky_p = [];
