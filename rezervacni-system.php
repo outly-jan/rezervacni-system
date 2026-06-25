@@ -1909,8 +1909,8 @@ function rs_sekce_interni(): string {
     echo "<div id='rs-int-panel-jedno'>";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='int_cely_den' onchange='rsCelyDen(this,\"int\")' style='width:auto'> Celý den</label></div>";
     echo "<div id='rs-int-cas-wrap'><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' step='900' onchange='var d=document.querySelector(\"[name=int_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsIntCheckVolno()'></div>";
-    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' step='900' onchange='rsIntCheckVolno()'></div>";
+    echo "<div class='rs-form-group'><label>Datum od *</label><input type='datetime-local' name='int_datum_od' onchange='var d=document.querySelector(\"[name=int_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsIntCheckVolno()'></div>";
+    echo "<div class='rs-form-group'><label>Datum do *</label><input type='datetime-local' name='int_datum_do' onchange='rsIntCheckVolno()'></div>";
     echo "</div></div>";
     echo "<div id='rs-int-den-wrap' style='display:none'><div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='int_datum_od_den' onchange='var d=document.querySelector(\"[name=int_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsIntCheckVolno()'></div>";
@@ -1926,8 +1926,8 @@ function rs_sekce_interni(): string {
     foreach ($dny as $k => $v) echo "<option value='{$k}'>{$v}</option>";
     echo "</select></div>";
     echo "<div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od' step='900'></div>";
-    echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do' step='900'></div>";
+    echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
+    echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
     echo "</div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Opakovat od *</label><input type='date' name='int_opakovani_od'></div>";
@@ -2878,8 +2878,8 @@ function rs_formular_sc(): string {
     $den_style = $old_cd ? '' : " style='display:none'";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400'><input type='checkbox' name='ext_cely_den'" . ($old_cd ? ' checked' : '') . " onchange='rsCelyDen(this,\"ext\")' style='width:auto'> Celý den</label></div>";
     echo "<div id='rs-ext-cas-wrap'{$cas_style}><div class='rs-form-row'>";
-    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od' step='900'" . ($old_cd ? '' : ' required') . $ov('ext_datum_od') . " onchange='var d=document.querySelector(\"[name=ext_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsCheckVolno();'></div>";
-    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do' step='900'" . ($old_cd ? '' : ' required') . $ov('ext_datum_do') . " onchange='rsCheckVolno();'></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas od *</label><input type='datetime-local' name='ext_datum_od'" . ($old_cd ? '' : ' required') . $ov('ext_datum_od') . " onchange='var d=document.querySelector(\"[name=ext_datum_do]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsCheckVolno();'></div>";
+    echo "<div class='rs-form-group'><label>Datum a čas do *</label><input type='datetime-local' name='ext_datum_do'" . ($old_cd ? '' : ' required') . $ov('ext_datum_do') . " onchange='rsCheckVolno();'></div>";
     echo "</div></div>";
     echo "<div id='rs-ext-den-wrap'{$den_style}><div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Datum od *</label><input type='date' name='ext_datum_od_den'" . ($old_cd ? ' required' : '') . $ov('ext_datum_od_den') . " onchange='var d=document.querySelector(\"[name=ext_datum_do_den]\");if(d){d.min=this.value;if(!d.value||d.value<this.value)d.value=this.value;}rsCheckVolno();'></div>";
