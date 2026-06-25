@@ -2062,7 +2062,7 @@ function rs_sekce_interni(): string {
         $dny_cs_v = [1=>'Pondělí',2=>'Úterý',3=>'Středa',4=>'Čtvrtek',5=>'Pátek',6=>'Sobota',7=>'Neděle'];
 
         echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($is_spravce ? 'Přehled interních rezervací' : 'Moje interní rezervace') . "</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Od</th><th>Do</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
 
         $gv_idx = 0;
         foreach ($grps_v as $sk_id_v => $g_rez_v) {
@@ -2096,7 +2096,7 @@ function rs_sekce_interni(): string {
             echo "<tr style='background:#eef3ee;cursor:pointer' onclick='rsGrpToggle(\"" . esc_js($gvid) . "\")'>";
             echo "<td><span id='{$gvid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev_v) . "</strong> <span style='color:#777;font-size:12px'>({$count_v}×)</span></td>";
             echo "<td>{$prostor_label_v}</td>";
-            echo "<td colspan='2' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_v)) . "</td>";
+            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_v)) . "</td>";
             echo "<td>" . esc_html($rez_user_v ? $rez_user_v->display_name : '–') . "</td>";
             echo "<td>" . esc_html($oddil_v ?: '–') . "</td>";
             echo "<td style='white-space:nowrap'>";
@@ -2120,8 +2120,7 @@ function rs_sekce_interni(): string {
                 echo "<tr class='{$gvid}' style='display:none;background:#f8faf8;{$opacity_v}'>";
                 echo "<td style='padding-left:26px;font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od_v)) . "</td>";
                 echo "<td></td>";
-                echo "<td style='font-size:12px'>" . esc_html(rs_format_datum($r_od_v)) . "</td>";
-                echo "<td style='font-size:12px'>" . esc_html(rs_format_datum($r_do_v)) . "</td>";
+                echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin($r_od_v, $r_do_v))) . "</td>";
                 echo "<td></td><td></td>";
                 echo "<td>" . rs_stav_badge($r_stav_v) . "</td>";
                 echo "<td>";
@@ -2146,8 +2145,7 @@ function rs_sekce_interni(): string {
             echo "<td>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
             if ($segs_s) echo " <em style='font-size:12px;color:#777'>(" . implode(', ', array_map('get_the_title',$segs_s)) . ")</em>";
             echo "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_od',true))) . "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_do',true))) . "</td>";
+            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true)))) . "</td>";
             echo "<td>" . esc_html($rez_us ? $rez_us->display_name : '–') . "</td>";
             echo "<td>" . esc_html($oddil_s ?: '–') . "</td>";
             echo "<td>" . rs_stav_badge($stav_v) . "</td>";
