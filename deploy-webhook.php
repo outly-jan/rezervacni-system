@@ -1,7 +1,10 @@
 <?php
-// Token musí odpovídat hodnotě GitHub secret DEPLOY_SECRET.
-// Po nahrání na server změň CHANGE_ME na náhodný řetězec.
-define('DEPLOY_SECRET', 'UqU7tlOxzc');
+// Token je uložen v deploy-secret.php (není v gitu).
+// Při prvním nasazení zkopíruj deploy-secret.php.example → deploy-secret.php
+// a nastav náhodný token. Stejný token vlož jako GitHub Secret DEPLOY_SECRET.
+$cfg = __DIR__ . '/deploy-secret.php';
+if (!file_exists($cfg)) { http_response_code(500); exit('Config missing'); }
+require $cfg;
 
 if (($_GET['token'] ?? '') !== DEPLOY_SECRET) {
     http_response_code(403);
