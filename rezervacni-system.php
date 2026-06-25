@@ -2089,7 +2089,9 @@ function rs_interni_zpracuj(string $action): string {
             update_post_meta($rid,'rs_nazev',$nazev);
             update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
             update_post_meta($rid,'rs_oddil',$oddil);
-            return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici' ? 'Čeká na schválení (víkend/svátek/prázdniny – ale bude zdarma).' : 'Automaticky potvrzena.'));
+            return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici'
+                ? 'Termín připadá na víkend, státní svátek nebo školní prázdniny. Tyto termíny jsou primárně vyhrazeny pro placený pronájem veřejností, a proto vyžadují schválení správcem. V případě schválení bude pro oddíl zdarma.'
+                : 'Automaticky potvrzena.'));
         }
 
         // Opakující se
@@ -2107,7 +2109,7 @@ function rs_interni_zpracuj(string $action): string {
         $vynechat_svat = isset($_POST['int_vynechat_svatky']);
 
         $skupina_id = rs_token();
-        $created = 0; $skipped = 0;
+        $created = 0; $skipped = 0; $n_cek = 0; $n_pot = 0;
         $current = strtotime($serie_od);
         $end     = strtotime($serie_do);
 
@@ -2127,12 +2129,17 @@ function rs_interni_zpracuj(string $action): string {
                         update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
                         update_post_meta($rid,'rs_oddil',$oddil);
                         $created++;
+                        if ($stav === 'cekajici') $n_cek++; else $n_pot++;
                     } else { $skipped++; }
                 }
             }
             $current = strtotime('+1 day',$current);
         }
-        return rs_alert("Série vytvořena: {$created} rezervací." . ($skipped ? " Přeskočeno {$skipped} (kolize nebo obsazeno)." : ''));
+        $msg = "Série vytvořena: {$created} rezervací.";
+        if ($skipped) $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno).";
+        if ($n_cek && $n_pot) $msg .= " {$n_pot} termínů automaticky potvrzeno, {$n_cek} čeká na schválení (připadají na víkend, svátek nebo prázdniny – termíny primárně vyhrazené pro placený pronájem).";
+        elseif ($n_cek)       $msg .= " Všechny termíny čekají na schválení – připadají na víkend, svátek nebo prázdniny (termíny primárně vyhrazené pro placený pronájem). V případě schválení budou zdarma.";
+        return rs_alert($msg);
     }
 
     if ($action === 'zrusit') {
