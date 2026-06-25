@@ -1,6 +1,6 @@
-# Rezervační systém – Středisko Chlumec
+# Aplikace pro rezervaci prostor skautského střediska
 
-WordPress plugin pro rezervaci prostor na skautchlumec.cz.
+WordPress plugin pro rezervaci prostor, nasazený nna skautchlumec.cz.
 
 Aplikace slouží k rezervaci objektů (skautský dům, Smetánka) a jejich částí (místnosti, chatky). Umožňuje přijímat žádosti od veřejnosti i plánovat vlastní interní akce oddílu – vše na jednom místě.
 
