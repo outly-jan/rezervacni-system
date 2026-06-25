@@ -2027,11 +2027,21 @@ function rs_sekce_interni(): string {
     echo "</div>";
 
     // 4b) Panel: Opakující se (skrytý)
+    $dny_zkr = ['1'=>'Po','2'=>'Út','3'=>'St','4'=>'Čt','5'=>'Pá','6'=>'So','7'=>'Ne'];
     echo "<div id='rs-int-panel-opak' style='display:none;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:14px'>";
     echo "<p style='font-size:13px;color:#555;margin-top:0'>Opakující se rezervace se vytvoří jako jednotlivé záznamy na každý vybraný den.</p>";
-    echo "<div class='rs-form-group'><label>Den v týdnu *</label><select name='int_den_tydne'>";
-    foreach ($dny as $k => $v) echo "<option value='{$k}'>{$v}</option>";
-    echo "</select></div>";
+    echo "<div class='rs-form-group' style='display:flex;align-items:center;gap:8px;margin-bottom:14px'>";
+    echo "<label style='white-space:nowrap;margin:0'>Opakovat každý</label>";
+    echo "<input type='number' name='int_interval' value='1' min='1' max='52' style='width:56px'> týden";
+    echo "</div>";
+    echo "<div class='rs-form-group'><label style='display:block;margin-bottom:8px'>Opakovat v *</label>";
+    echo "<div style='display:flex;gap:6px;flex-wrap:wrap'>";
+    foreach ($dny_zkr as $k => $v) {
+        echo "<label style='display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:2px solid #ccc;cursor:pointer;font-size:12px;font-weight:600;user-select:none'>";
+        echo "<input type='checkbox' name='int_dny_tydne[]' value='{$k}' style='position:absolute;opacity:0;width:0;height:0' onchange=\"var l=this.closest('label');if(l){l.style.background=this.checked?'#1a5c2a':'';l.style.color=this.checked?'#fff':'';l.style.borderColor=this.checked?'#1a5c2a':'#ccc'}\">";
+        echo esc_html($v) . "</label>";
+    }
+    echo "</div></div>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
     echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
@@ -2312,11 +2322,13 @@ function rs_interni_zpracuj(string $action): string {
 
         // Opakující se
         $pocet        = 0;
-        $den          = (int)($_POST['int_den_tydne'] ?? 1);
+        $dny_tydne    = array_values(array_filter(array_map('intval', (array)($_POST['int_dny_tydne'] ?? [])), fn($d) => $d >= 1 && $d <= 7));
+        $interval     = max(1, min(52, (int)($_POST['int_interval'] ?? 1)));
         $cas_od       = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
         $cas_do       = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
         $serie_od     = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
         $serie_do     = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
+        if (empty($dny_tydne))        return rs_alert('Vyberte alespoň jeden den v týdnu.','error');
         if (!$serie_od || !$serie_do) return rs_alert('Zadejte rozsah opakování.','error');
 
         $vyjimky_raw   = sanitize_text_field($_POST['int_vyjimky'] ?? '');
@@ -2324,13 +2336,17 @@ function rs_interni_zpracuj(string $action): string {
         $vynechat_praz = isset($_POST['int_vynechat_prazdniny']);
         $vynechat_svat = isset($_POST['int_vynechat_svatky']);
 
-        $skupina_id = rs_token();
+        $skupina_id   = rs_token();
         $created = 0; $skipped = 0; $n_cek = 0; $n_pot = 0;
-        $current = strtotime($serie_od);
-        $end     = strtotime($serie_do);
+        $current      = strtotime($serie_od);
+        $end          = strtotime($serie_do);
+        // Anchor week cycle to Monday of the start week
+        $start_monday = $current - ((int)date('N', $current) - 1) * 86400;
 
         while ($current <= $end) {
-            if ((int)date('N',$current) === $den) {
+            $dow        = (int)date('N', $current);
+            $week_index = (int)round(($current - $start_monday) / (7 * 86400));
+            if (in_array($dow, $dny_tydne, true) && $week_index % $interval === 0) {
                 $d    = date('Y-m-d',$current);
                 $skip = in_array($d,$vyjimky,true)
                      || ($vynechat_praz && rs_jsou_prazdniny($d))
