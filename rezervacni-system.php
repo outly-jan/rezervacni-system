@@ -258,6 +258,21 @@ function rs_format_datum(string $d): string {
     return date('j. n. Y', $ts) . ($t === '00:00' || $t === '23:59' ? '' : ' v ' . $t);
 }
 
+function rs_format_termin(string $od, string $do_): string {
+    $ts_od = strtotime($od);
+    $ts_do = strtotime($do_);
+    if (!$ts_od) return rs_format_datum($od);
+    if (!$ts_do || date('Y-m-d', $ts_od) !== date('Y-m-d', $ts_do)) {
+        return rs_format_datum($od) . "\n" . rs_format_datum($do_);
+    }
+    $cas_od = date('H:i', $ts_od);
+    $cas_do = date('H:i', $ts_do);
+    if (($cas_od === '00:00') && ($cas_do === '23:59' || $cas_do === '00:00')) {
+        return date('j. n. Y', $ts_od);
+    }
+    return date('j. n. Y', $ts_od) . ', ' . $cas_od . ' až ' . $cas_do;
+}
+
 function rs_sprava_url(string $token): string {
     global $wpdb;
     $base = get_option('rs_formular_url', '');
@@ -1742,9 +1757,10 @@ function rs_sekce_rezervace(): string {
                 $r_od    = get_post_meta($r->ID,'rs_datum_od',true);
                 $opacity = $r_stav === 'zrusena' ? 'opacity:.5;' : '';
                 echo "<tr class='{$gid}' style='display:none;background:#f8faf8;{$opacity}'>";
+                $r_do_raw = get_post_meta($r->ID,'rs_datum_do',true);
                 echo "<td style='padding-left:26px;font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od)) . "</td>";
                 echo "<td></td>";
-                echo "<td style='font-size:12px'>" . esc_html(rs_format_datum($r_od)) . "<br>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_do',true))) . "</td>";
+                echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin($r_od, $r_do_raw))) . "</td>";
                 echo "<td></td><td></td>";
                 echo "<td>" . rs_stav_badge($r_stav) . "</td>";
                 echo "<td>";
@@ -1771,11 +1787,10 @@ function rs_sekce_rezervace(): string {
             $uid     = (int)(get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($r->ID,'rs_wp_user_id',true));
             $user    = get_userdata($uid);
             echo "<tr>";
-            $s_od = rs_format_datum(get_post_meta($r->ID,'rs_datum_od',true));
-            $s_do = rs_format_datum(get_post_meta($r->ID,'rs_datum_do',true));
+            $s_termin = rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true));
             echo "<td>" . esc_html($nazev) . "</td>";
             echo "<td>" . esc_html($prostor) . "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . esc_html($s_od) . ($s_do !== $s_od ? "<br>" . esc_html($s_do) : '') . "</td>";
+            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($s_termin)) . "</td>";
             echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
             echo "<td>" . esc_html($oddil ?: '–') . "</td>";
             echo "<td>" . rs_stav_badge($stav) . "</td>";
