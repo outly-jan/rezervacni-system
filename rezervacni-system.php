@@ -1596,6 +1596,24 @@ function rs_sekce_rezervace(): string {
                 if ($first_active) rs_notifikuj_zruseni((int)$first_active);
                 $zprava = rs_alert("Série zrušena ({$n} termínů).");
             }
+        } elseif ($action === 'smazat' && $rid) {
+            if (get_post_meta($rid,'rs_stav',true) === 'zrusena') {
+                wp_delete_post($rid, true);
+                $zprava = rs_alert('Rezervace trvale smazána.');
+            }
+        } elseif ($action === 'smazat_skupinu_admin') {
+            $sk_id = sanitize_text_field($_POST['skupina_id'] ?? '');
+            if ($sk_id) {
+                $sk_all = get_posts(['post_type'=>'rs_rezervace','numberposts'=>-1,'fields'=>'ids',
+                    'meta_query'=>[['key'=>'rs_skupina_id','value'=>$sk_id]]]);
+                $n = 0;
+                foreach ($sk_all as $sid) {
+                    if (get_post_meta($sid,'rs_stav',true) === 'zrusena') {
+                        wp_delete_post($sid, true); $n++;
+                    }
+                }
+                $zprava = rs_alert("Zrušené termíny série smazány ({$n}).");
+            }
         } elseif ($action === 'ulozit_ind_cenu' && $rid) {
             $ind = (float)str_replace(',','.',($_POST['ind_cena'] ?? 0));
             update_post_meta($rid,'rs_cena_individualni',$ind);
@@ -1672,6 +1690,10 @@ function rs_sekce_rezervace(): string {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
                 echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
+            } else {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Trvale smazat tuto rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='smazat'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-secondary'>🗑 Smazat</button></form>";
             }
             echo "</td></tr>";
         }
@@ -1748,7 +1770,12 @@ function rs_sekce_rezervace(): string {
             if ($has_act) {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit celou sérii ({$count} termínů)?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_rez_action' value='zrusit_skupinu_admin'><input type='hidden' name='skupina_id' value='" . esc_attr($sk_id) . "'>";
-                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Série</button></form>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Série</button></form> ";
+            }
+            if ($n_zru) {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Trvale smazat {$n_zru} zrušených termínů série?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='smazat_skupinu_admin'><input type='hidden' name='skupina_id' value='" . esc_attr($sk_id) . "'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-secondary'>🗑 Série</button></form>";
             }
             echo "</td></tr>";
 
@@ -1774,6 +1801,10 @@ function rs_sekce_rezervace(): string {
                     echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit tento termín?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
                     echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
                     echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger' style='font-size:11px'>✕</button></form>";
+                } else {
+                    echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Trvale smazat tento termín?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                    echo "<input type='hidden' name='rs_rez_action' value='smazat'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                    echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-secondary' style='font-size:11px'>🗑</button></form>";
                 }
                 echo "</td></tr>";
             }
@@ -1805,6 +1836,10 @@ function rs_sekce_rezervace(): string {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_rez_action' value='zrusit'><input type='hidden' name='rez_id' value='{$r->ID}'>";
                 echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-danger'>✕ Zrušit</button></form>";
+            } else {
+                echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Trvale smazat tuto rezervaci?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+                echo "<input type='hidden' name='rs_rez_action' value='smazat'><input type='hidden' name='rez_id' value='{$r->ID}'>";
+                echo "<button type='submit' class='rs-btn rs-btn-sm rs-btn-secondary'>🗑 Smazat</button></form>";
             }
             echo "</td></tr>";
         }
@@ -2406,6 +2441,16 @@ function rs_interni_zpracuj(string $action): string {
         if ($owner !== $uid && !rs_ma_pravo('spravce')) return rs_alert('Nemáš oprávnění.','error');
         update_post_meta($rid,'rs_stav','zrusena');
         return rs_alert('Rezervace zrušena.');
+    }
+
+    if ($action === 'smazat') {
+        if (!rs_ma_pravo('spravce')) return rs_alert('Nemáš oprávnění.','error');
+        $rid = (int)($_POST['int_rez_id'] ?? 0);
+        if ($rid && get_post_meta($rid,'rs_stav',true) === 'zrusena') {
+            wp_delete_post($rid, true);
+            return rs_alert('Rezervace trvale smazána.');
+        }
+        return '';
     }
 
     if ($action === 'zrusit_skupinu') {
