@@ -262,7 +262,7 @@ function rs_sprava_url(string $token): string {
     global $wpdb;
     $base = get_option('rs_formular_url', '');
     if (!$base) {
-        $row  = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_formular]%' LIMIT 1");
+        $row  = $wpdb->get_row($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_status=%s AND post_type=%s AND post_content LIKE %s LIMIT 1",'publish','page','%[rs_formular]%'));
         $base = $row ? (string)get_permalink((int)$row->ID) : home_url('/');
     }
     return add_query_arg('rs_sprava', $token, rtrim($base, '/') . '/');
@@ -282,7 +282,7 @@ function rs_prostor_label(int $prostor_id, array $seg_ids = []): string {
 
 function rs_admin_url(): string {
     global $wpdb;
-    $row = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_admin]%' LIMIT 1");
+    $row = $wpdb->get_row($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_status=%s AND post_type=%s AND post_content LIKE %s LIMIT 1",'publish','page','%[rs_admin]%'));
     return $row ? (string)get_permalink((int)$row->ID) : home_url('/');
 }
 
@@ -2117,11 +2117,15 @@ function rs_interni_zpracuj(string $action): string {
         $skupina = sanitize_text_field($_POST['int_skupina_id'] ?? '');
         if (!$skupina) return '';
         $rez = get_posts(['post_type'=>'rs_rezervace','numberposts'=>-1,'fields'=>'ids','meta_query'=>[['key'=>'rs_skupina_id','value'=>$skupina]]]);
-        foreach ($rez as $rid) {
-            $owner = (int)get_post_meta($rid,'rs_wp_user_id',true);
-            if ($owner === $uid || rs_ma_pravo('spravce')) {
-                update_post_meta($rid,'rs_stav','zrusena');
+        if (empty($rez)) return '';
+        if (!rs_ma_pravo('spravce')) {
+            foreach ($rez as $rid) {
+                if ((int)get_post_meta($rid,'rs_wp_user_id',true) !== $uid)
+                    return rs_alert('Nemáš oprávnění zrušit tuto sérii.','error');
             }
+        }
+        foreach ($rez as $rid) {
+            update_post_meta($rid,'rs_stav','zrusena');
         }
         return rs_alert('Celá série zrušena.');
     }
@@ -2274,7 +2278,7 @@ function rs_kalendar_sc(array $atts): string {
     $form_url = get_option('rs_formular_url', '');
     if (!$form_url) {
         global $wpdb;
-        $form_row = $wpdb->get_row("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type='page' AND post_content LIKE '%[rs_formular]%' LIMIT 1");
+        $form_row = $wpdb->get_row($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_status=%s AND post_type=%s AND post_content LIKE %s LIMIT 1",'publish','page','%[rs_formular]%'));
         $form_url = $form_row ? get_permalink($form_row->ID) : '';
     }
 
@@ -2383,9 +2387,9 @@ function rs_kalendar_sc(array $atts): string {
         echo "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px'>";
         echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
         echo "<form method='get' action='#rs-kalendar' style='display:flex;gap:6px;align-items:center'>";
-        foreach ($_GET as $k => $v)
-            if ($k !== 'rs_rok' && $k !== 'rs_mesic' && is_string($v))
-                echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($v) . "'>";
+        foreach (['page_id', 'p', 'pagename', 'post_type'] as $k)
+            if (isset($_GET[$k]) && is_string($_GET[$k]))
+                echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($_GET[$k]) . "'>";
         echo "<select name='rs_mesic' onchange='rsKalNav(this)' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
         for ($m = 1; $m <= 12; $m++) {
             $sel = ($m === $mesic) ? ' selected' : '';
@@ -3101,7 +3105,7 @@ function rs_render_sprava_rezervace(): string {
                 $zprava = rs_alert('Rezervace byla zrušena.');
             } elseif ($action === 'upravit_kontakt' && $stav !== 'zrusena') {
                 $r_typ = get_post_meta($rid,'rs_rez_typ',true);
-                update_post_meta($rid,'rs_pocet_lidi',(int)($_POST['pocet_lidi'] ?? 1));
+                update_post_meta($rid,'rs_pocet_lidi', max(1, min(500, (int)($_POST['pocet_lidi'] ?? 1))));
                 $up_predv = preg_replace('/[^0-9]/', '', $_POST['predvolba'] ?? '420') ?: '420';
                 $up_mobil = preg_replace('/\s+/', '', sanitize_text_field($_POST['mobil'] ?? ''));
                 update_post_meta($rid,'rs_tel_predvolba', $up_predv);
