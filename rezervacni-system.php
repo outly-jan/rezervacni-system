@@ -2042,7 +2042,8 @@ function rs_sekce_interni(): string {
         echo esc_html($v) . "</label>";
     }
     echo "</div></div>";
-    echo "<div class='rs-form-row'>";
+    echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer'><input type='checkbox' name='int_opak_cely_den' style='width:auto' onchange=\"document.getElementById('rs-int-opak-cas').style.display=this.checked?'none':''\" > Celý den</label></div>";
+    echo "<div id='rs-int-opak-cas' class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
     echo "<div class='rs-form-group'><label>Čas do</label><input type='time' name='int_cas_do'></div>";
     echo "</div>";
@@ -2324,8 +2325,13 @@ function rs_interni_zpracuj(string $action): string {
         $pocet        = 0;
         $dny_tydne    = array_values(array_filter(array_map('intval', (array)($_POST['int_dny_tydne'] ?? [])), fn($d) => $d >= 1 && $d <= 7));
         $interval     = max(1, min(52, (int)($_POST['int_interval'] ?? 1)));
-        $cas_od       = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
-        $cas_do       = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
+        if (!empty($_POST['int_opak_cely_den'])) {
+            $cas_od = '00:00';
+            $cas_do = '23:59';
+        } else {
+            $cas_od = sanitize_text_field($_POST['int_cas_od'] ?? '08:00');
+            $cas_do = sanitize_text_field($_POST['int_cas_do'] ?? '10:00');
+        }
         $serie_od     = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
         $serie_do     = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
         if (empty($dny_tydne))        return rs_alert('Vyberte alespoň jeden den v týdnu.','error');
