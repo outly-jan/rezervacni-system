@@ -1951,10 +1951,18 @@ function rs_uloz_ucastniky(int $id) {
 function rs_sekce_interni(): string {
     $zprava = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_int_action'])) {
-        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_interni')) return rs_alert('Neplatný token.','error');
-        $action = sanitize_key($_POST['rs_int_action']);
-        $zprava = rs_interni_zpracuj($action);
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_interni')) {
+            set_transient('rs_int_flash_' . get_current_user_id(), rs_alert('Neplatný token.','error'), 60);
+        } else {
+            $action = sanitize_key($_POST['rs_int_action']);
+            set_transient('rs_int_flash_' . get_current_user_id(), rs_interni_zpracuj($action), 60);
+        }
+        wp_safe_redirect(wp_unslash($_SERVER['REQUEST_URI']));
+        exit;
     }
+    $uid_f = get_current_user_id();
+    $zprava = (string)(get_transient('rs_int_flash_' . $uid_f) ?: '');
+    if ($zprava) delete_transient('rs_int_flash_' . $uid_f);
 
     $user_id    = get_current_user_id();
     $is_spravce = rs_ma_pravo('spravce');
