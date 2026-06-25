@@ -1957,8 +1957,8 @@ function rs_sekce_interni(): string {
             $action = sanitize_key($_POST['rs_int_action']);
             set_transient('rs_int_flash_' . get_current_user_id(), rs_interni_zpracuj($action), 60);
         }
-        wp_safe_redirect(wp_unslash($_SERVER['REQUEST_URI']));
-        exit;
+        $redir = esc_js(wp_unslash($_SERVER['REQUEST_URI']));
+        return "<script>window.location.replace('{$redir}');</script>";
     }
     $uid_f = get_current_user_id();
     $zprava = (string)(get_transient('rs_int_flash_' . $uid_f) ?: '');
