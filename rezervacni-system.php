@@ -328,6 +328,15 @@ function rs_podpis(): string {
     return $radky ? $base . "\n" . implode("\n", $radky) : $base;
 }
 
+function rs_rez_get_email(int $id): string {
+    $email = get_post_meta($id, 'rs_email', true);
+    if ($email) return $email;
+    $uid = (int)(get_post_meta($id, 'rs_int_rezervujici_id', true) ?: get_post_meta($id, 'rs_wp_user_id', true));
+    if (!$uid) return '';
+    $user = get_userdata($uid);
+    return $user ? $user->user_email : '';
+}
+
 function rs_notifikuj_nova(int $id) {
     $email      = get_post_meta($id, 'rs_email', true);
     $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
@@ -355,30 +364,58 @@ function rs_notifikuj_nova(int $id) {
 }
 
 function rs_notifikuj_potvrzeni(int $id) {
-    $email = get_post_meta($id, 'rs_email', true);
+    $email = rs_rez_get_email($id);
     if (!$email) return;
     $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
     $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
     $label      = rs_prostor_label($prostor_id, $seg_ids);
     $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
     $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
-    $cena       = (float)get_post_meta($id, 'rs_cena_celkem', true);
-    $token      = get_post_meta($id, 'rs_token', true);
-    rs_mail($email, "Rezervace potvrzena – {$label}",
-        "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
-        get_option('rs_stredisko_kontakt_email', ''));
+    if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
+        $nazev = get_post_meta($id, 'rs_nazev', true);
+        rs_mail($email, "Interní rezervace schválena – {$label}",
+            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} byla schválena správcem.\n\n" . rs_podpis(),
+            get_option('rs_stredisko_kontakt_email', ''));
+    } else {
+        $cena  = (float)get_post_meta($id, 'rs_cena_celkem', true);
+        $token = get_post_meta($id, 'rs_token', true);
+        rs_mail($email, "Rezervace potvrzena – {$label}",
+            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
+            get_option('rs_stredisko_kontakt_email', ''));
+    }
 }
 
 function rs_notifikuj_zruseni(int $id) {
-    $email = get_post_meta($id, 'rs_email', true);
+    $email = rs_rez_get_email($id);
     if (!$email) return;
     $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
     $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
     $label      = rs_prostor_label($prostor_id, $seg_ids);
     $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
     $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
-    rs_mail($email, "Rezervace zrušena – {$label}",
-        "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+    if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
+        $nazev = get_post_meta($id, 'rs_nazev', true);
+        rs_mail($email, "Interní rezervace zrušena – {$label}",
+            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+            get_option('rs_stredisko_kontakt_email', ''));
+    } else {
+        rs_mail($email, "Rezervace zrušena – {$label}",
+            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+            get_option('rs_stredisko_kontakt_email', ''));
+    }
+}
+
+function rs_notifikuj_interni_cekajici(int $id) {
+    $email = rs_rez_get_email($id);
+    if (!$email) return;
+    $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label      = rs_prostor_label($prostor_id, $seg_ids);
+    $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    $nazev      = get_post_meta($id, 'rs_nazev', true);
+    rs_mail($email, "Interní rezervace čeká na schválení – {$label}",
+        "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} čeká na schválení správcem. Termín připadá na víkend, státní svátek nebo prázdniny.\n\nJakmile bude schválena nebo zamítnuta, přijde vám e-mail s výsledkem.\n\n" . rs_podpis(),
         get_option('rs_stredisko_kontakt_email', ''));
 }
 
@@ -1506,12 +1543,14 @@ function rs_sekce_rezervace(): string {
             if ($sk_id) {
                 $sk_all = get_posts(['post_type'=>'rs_rezervace','numberposts'=>-1,'fields'=>'ids',
                     'meta_query'=>[['key'=>'rs_skupina_id','value'=>$sk_id]]]);
-                $n = 0;
+                $n = 0; $first_active = null;
                 foreach ($sk_all as $sid) {
                     if (get_post_meta($sid,'rs_stav',true) !== 'zrusena') {
+                        if (!$first_active) $first_active = $sid;
                         update_post_meta($sid,'rs_stav','zrusena'); $n++;
                     }
                 }
+                if ($first_active) rs_notifikuj_zruseni((int)$first_active);
                 $zprava = rs_alert("Série zrušena ({$n} termínů).");
             }
         } elseif ($action === 'ulozit_ind_cenu' && $rid) {
@@ -2089,8 +2128,9 @@ function rs_interni_zpracuj(string $action): string {
             update_post_meta($rid,'rs_nazev',$nazev);
             update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
             update_post_meta($rid,'rs_oddil',$oddil);
+            if ($stav === 'cekajici') rs_notifikuj_interni_cekajici($rid);
             return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici'
-                ? 'Termín připadá na víkend, státní svátek nebo školní prázdniny. Tyto termíny jsou primárně vyhrazeny pro placený pronájem veřejností, a proto vyžadují schválení správcem. V případě schválení bude pro oddíl zdarma.'
+                ? 'Termín připadá na víkend, státní svátek nebo školní prázdniny. Tyto termíny jsou primárně vyhrazeny pro placený pronájem veřejností, a proto vyžadují schválení správcem. V případě schválení bude pro oddíl zdarma. Potvrzení nebo zamítnutí vám přijde na e-mail.'
                 : 'Automaticky potvrzena.'));
         }
 
@@ -2135,10 +2175,21 @@ function rs_interni_zpracuj(string $action): string {
             }
             $current = strtotime('+1 day',$current);
         }
+        if ($n_cek > 0) {
+            $uid_notif  = $rezervujici ?: $uid;
+            $user_notif = get_userdata($uid_notif);
+            $email_notif = $user_notif ? $user_notif->user_email : '';
+            if ($email_notif) {
+                $label_notif = rs_prostor_label($prostor_id, $seg_ids);
+                rs_mail($email_notif, "Interní rezervace série čekají na schválení – {$label_notif}",
+                    "Dobrý den,\n\n{$n_cek} " . ($n_cek === 1 ? 'termín' : ($n_cek < 5 ? 'termíny' : 'termínů')) . " z vaší série „{$nazev}" objektu {$label_notif} čeká na schválení správcem (připadají na víkend, státní svátek nebo prázdniny).\n\nJakmile budou schváleny nebo zamítnuty, přijdou vám e-maily s výsledky.\n\n" . rs_podpis(),
+                    get_option('rs_stredisko_kontakt_email', ''));
+            }
+        }
         $msg = "Série vytvořena: {$created} rezervací.";
         if ($skipped) $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno).";
-        if ($n_cek && $n_pot) $msg .= " {$n_pot} termínů automaticky potvrzeno, {$n_cek} čeká na schválení (připadají na víkend, svátek nebo prázdniny – termíny primárně vyhrazené pro placený pronájem).";
-        elseif ($n_cek)       $msg .= " Všechny termíny čekají na schválení – připadají na víkend, svátek nebo prázdniny (termíny primárně vyhrazené pro placený pronájem). V případě schválení budou zdarma.";
+        if ($n_cek && $n_pot) $msg .= " {$n_pot} termínů automaticky potvrzeno, {$n_cek} čeká na schválení (připadají na víkend, svátek nebo prázdniny – termíny primárně vyhrazené pro placený pronájem). O výsledku schválení vás informujeme e-mailem.";
+        elseif ($n_cek)       $msg .= " Všechny termíny čekají na schválení – připadají na víkend, svátek nebo prázdniny (termíny primárně vyhrazené pro placený pronájem). O výsledku schválení vás informujeme e-mailem.";
         return rs_alert($msg);
     }
 
@@ -2162,9 +2213,12 @@ function rs_interni_zpracuj(string $action): string {
                     return rs_alert('Nemáš oprávnění zrušit tuto sérii.','error');
             }
         }
+        $first_active = null;
         foreach ($rez as $rid) {
+            if (get_post_meta($rid,'rs_stav',true) !== 'zrusena' && !$first_active) $first_active = $rid;
             update_post_meta($rid,'rs_stav','zrusena');
         }
+        if ($first_active) rs_notifikuj_zruseni((int)$first_active);
         return rs_alert('Celá série zrušena.');
     }
     return '';
