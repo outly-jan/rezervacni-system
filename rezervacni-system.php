@@ -3578,7 +3578,7 @@ function rs_sekce_napoveda(): string {
 <p>Vedoucí mají přístup k záložce <strong>Interní rezervace</strong>, kde mohou:</p>
 <ul>
   <li>Zadat interní akci oddílu (výprava, oddílová rada, přespávačka apod.) přímo bez schvalovacího procesu.</li>
-  <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Systém automaticky přeskočí státní svátky a prázdniny (lze volitelně vypnout), takže není třeba výjimky zadávat ručně. Všechny termíny série se v přehledu zobrazí sbalené pod jedno označení, aby tabulku nepřeplňovaly.</li>
+  <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Lze zvolit <strong>více dní v týdnu najednou</strong> (např. pondělí a středa) a nastavit <strong>interval opakování</strong> (každý týden, ob týden, každý třetí týden…). Systém automaticky přeskočí státní svátky a prázdniny (lze volitelně vypnout), takže není třeba výjimky zadávat ručně. Všechny termíny série se v přehledu zobrazí sbalené pod jedno označení, aby tabulku nepřeplňovaly.</li>
   <li>Zrušit jednotlivé termíny nebo celou sérii najednou – každý vedoucí ale může rušit jen rezervace, které sám vytvořil, ne rezervace ostatních vedoucích.</li>
 </ul>
 
