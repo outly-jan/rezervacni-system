@@ -374,7 +374,7 @@ function rs_notifikuj_potvrzeni(int $id) {
     if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
         $nazev = get_post_meta($id, 'rs_nazev', true);
         rs_mail($email, "Interní rezervace schválena – {$label}",
-            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} byla schválena správcem.\n\n" . rs_podpis(),
+            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} byla schválena správcem.\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     } else {
         $cena  = (float)get_post_meta($id, 'rs_cena_celkem', true);
@@ -396,7 +396,7 @@ function rs_notifikuj_zruseni(int $id) {
     if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
         $nazev = get_post_meta($id, 'rs_nazev', true);
         rs_mail($email, "Interní rezervace zrušena – {$label}",
-            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     } else {
         rs_mail($email, "Rezervace zrušena – {$label}",
@@ -415,7 +415,7 @@ function rs_notifikuj_interni_cekajici(int $id) {
     $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
     $nazev      = get_post_meta($id, 'rs_nazev', true);
     rs_mail($email, "Interní rezervace čeká na schválení – {$label}",
-        "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " „{$nazev}"" : '') . " objektu {$label} na termín {$od} – {$do_} čeká na schválení správcem. Termín připadá na víkend, státní svátek nebo prázdniny.\n\nJakmile bude schválena nebo zamítnuta, přijde vám e-mail s výsledkem.\n\n" . rs_podpis(),
+        "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} čeká na schválení správcem. Termín připadá na víkend, státní svátek nebo prázdniny.\n\nJakmile bude schválena nebo zamítnuta, přijde vám e-mail s výsledkem.\n\n" . rs_podpis(),
         get_option('rs_stredisko_kontakt_email', ''));
 }
 
@@ -1560,7 +1560,7 @@ function rs_sekce_rezervace(): string {
                         $label_n  = rs_prostor_label($pid_n,$seg_n);
                         $nazev_n  = get_post_meta((int)$first_confirmed,'rs_nazev',true);
                         rs_mail($email_notif, "Interní rezervace série schváleny – {$label_n}",
-                            "Dobrý den,\n\n{$n} " . ($n===1?'termín':($n<5?'termíny':'termínů')) . " z vaší série" . ($nazev_n ? " „{$nazev_n}"" : '') . " objektu {$label_n} bylo schváleno správcem.\n\n" . rs_podpis(),
+                            "Dobrý den,\n\n{$n} " . ($n===1?'termín':($n<5?'termíny':'termínů')) . " z vaší série" . ($nazev_n ? " \u{201E}{$nazev_n}\u{201D}" : '') . " objektu {$label_n} bylo schváleno správcem.\n\n" . rs_podpis(),
                             get_option('rs_stredisko_kontakt_email',''));
                     }
                 }
@@ -2313,7 +2313,7 @@ function rs_interni_zpracuj(string $action): string {
             if ($email_notif) {
                 $label_notif = rs_prostor_label($prostor_id, $seg_ids);
                 rs_mail($email_notif, "Interní rezervace série čekají na schválení – {$label_notif}",
-                    "Dobrý den,\n\n{$n_cek} " . ($n_cek === 1 ? 'termín' : ($n_cek < 5 ? 'termíny' : 'termínů')) . " z vaší série „{$nazev}" objektu {$label_notif} čeká na schválení správcem (připadají na víkend, státní svátek nebo prázdniny).\n\nJakmile budou schváleny nebo zamítnuty, přijdou vám e-maily s výsledky.\n\n" . rs_podpis(),
+                    "Dobrý den,\n\n{$n_cek} " . ($n_cek === 1 ? 'termín' : ($n_cek < 5 ? 'termíny' : 'termínů')) . ' z vaší série ' . ($nazev ? "\u{201E}{$nazev}\u{201D} " : '') . "objektu {$label_notif} čeká na schválení správcem (připadají na víkend, státní svátek nebo prázdniny).\n\nJakmile budou schváleny nebo zamítnuty, přijdou vám e-maily s výsledky.\n\n" . rs_podpis(),
                     get_option('rs_stredisko_kontakt_email', ''));
             }
         }
