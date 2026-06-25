@@ -2715,14 +2715,18 @@ function rs_formular_sc(): string {
     if (isset($_GET['rs_sprava'])) return rs_render_sprava_rezervace();
 
     // Přihlášení organizátoři patří do admin panelu, ne sem
-    if (rs_ma_pravo('vedeni')) {
-        $admin_url = rs_admin_url();
+    // Výjimka: ?rs_nahlad=1 zobrazí formulář jako veřejnost (pro účely testování)
+    if (rs_ma_pravo('vedeni') && !isset($_GET['rs_nahlad'])) {
+        $admin_url  = rs_admin_url();
+        $nahlad_url = add_query_arg('rs_nahlad', '1');
         ob_start();
         rs_css();
         echo "<div class='rs-wrap'>";
         echo "<div style='padding:20px;background:#f8f9fa;border:1px solid #ddd;border-radius:6px;text-align:center'>";
         echo "<p style='margin:0 0 12px;font-size:15px'>Tento rezervační formulář je určený pro zájemce zvenčí. Ty patříš k vedení oddílů – použij interní formulář pro členy střediska.</p>";
         echo "<a href='" . esc_url($admin_url) . "#rs-interni' class='rs-btn rs-btn-primary'>Interní formulář pro členy střediska</a>";
+        echo "<p style='margin:20px 0 8px;font-size:13px;color:#666'>Pro účely testování si můžeš zobrazit i formulář pro veřejnost (jako kdybys nebyl/a přihlášen/a)</p>";
+        echo "<a href='" . esc_url($nahlad_url) . "' class='rs-btn rs-btn-secondary'>Zobrazit formulář pro veřejnost</a>";
         echo "</div></div>";
         return ob_get_clean();
     }
