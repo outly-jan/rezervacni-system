@@ -21,7 +21,7 @@ Aplikace slouží k rezervaci objektů a jejich částí (místnosti, chatky). U
 Přístup k záložce **Interní rezervace**:
 
 - Zadat interní akci (výprava, schůzka, přespávačka…) přímo bez schvalovacího procesu.
-- Nastavit opakující se rezervaci (typicky schůzky na celou sezónu) jedním kliknutím – systém automaticky přeskočí státní svátky a prázdniny (lze vypnout). Série se v přehledu zobrazí sbalená pod jedno označení.
+- Nastavit opakující se rezervaci (typicky schůzky na celou sezónu) jedním kliknutím – lze zvolit **více dní v týdnu najednou** (např. pondělí a středa) a nastavit **interval opakování** (každý týden, ob týden, každý třetí týden…). Systém automaticky přeskočí státní svátky a prázdniny (lze vypnout). Série se v přehledu zobrazí sbalená pod jedno označení.
 - Zrušit jednotlivé termíny nebo celou sérii – každý vedoucí může rušit jen rezervace, které sám vytvořil.
 
 ---
