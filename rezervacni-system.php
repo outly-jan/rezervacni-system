@@ -2272,7 +2272,7 @@ function rs_kalendar_sc(array $atts): string {
 
     ob_start();
     echo "<div class='rs-wrap' id='rs-kalendar'>";
-    echo "<h3 style='margin-bottom:20px'>Obsazenost objektů</h3>";
+    echo "<h3 style='margin-bottom:20px'>Rezervace prostor</h3>";
 
     // URL stránky s rezervačním formulářem: option → auto-detekce → prázdné
     $form_url = get_option('rs_formular_url', '');
