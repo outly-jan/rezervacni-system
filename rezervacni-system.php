@@ -2762,7 +2762,7 @@ function rs_formular_sc(): string {
         return ob_get_clean();
     }
 
-    echo "<h3 style='margin-bottom:16px'>Žádost o rezervaci objektu</h3>{$zprava}";
+    echo "<h3 style='margin-bottom:16px'>Žádost o rezervaci</h3>{$zprava}";
 
     echo "<form method='post' id='rs-ext-form'>" . wp_nonce_field('rs_formular','_wpnonce',true,false);
     echo "<input type='hidden' name='rs_formular_odeslat' value='1'>";
