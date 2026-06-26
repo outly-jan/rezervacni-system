@@ -3276,10 +3276,23 @@ function rs_formular_sc(): string {
             if (rs_ma_segmenty($p->ID))
                 foreach (rs_get_segmenty($p->ID) as $s) {
                     if (rs_je_ext_vypnuto($s->ID)) continue;
-                    $sd[$p->ID][] = ['id'=>$s->ID,'nazev'=>$s->post_title];
+                    $sd[$p->ID][] = ['id'=>$s->ID,'nazev'=>$s->post_title,'kap'=>(int)get_post_meta($s->ID,'rs_kapacita',true)];
                 }
         }
         echo json_encode($sd);
+    ?>;
+    var rsExtProstorKap = <?php
+        $kd = [];
+        foreach ($prostory as $p) {
+            if (rs_je_ext_vypnuto($p->ID)) continue;
+            if (rs_ma_segmenty($p->ID)) {
+                $segs_all = rs_get_segmenty($p->ID);
+                $kd[$p->ID] = array_sum(array_map(fn($s) => (int)get_post_meta($s->ID,'rs_kapacita',true), $segs_all));
+            } else {
+                $kd[$p->ID] = (int)get_post_meta($p->ID,'rs_kapacita',true);
+            }
+        }
+        echo json_encode($kd);
     ?>;
     function rsExtProstorChange(pid){
         var wrap=document.getElementById('rs-ext-seg-wrap');
@@ -3346,6 +3359,26 @@ function rs_formular_sc(): string {
             else{alert('ARES: '+d.data);}
         });
     }
+    document.getElementById('rs-ext-form').addEventListener('submit', function(e) {
+        var pid   = document.getElementById('rs-ext-prostor').value;
+        var pocet = parseInt((document.querySelector('[name=ext_pocet]') || {}).value) || 0;
+        if (!pid || pocet <= 0) return;
+        var kap  = 0;
+        var segs = Array.from(document.querySelectorAll('[name="ext_segmenty[]"]:checked'));
+        if (segs.length > 0 && rsExtSegData[pid]) {
+            segs.forEach(function(cb) {
+                var seg = (rsExtSegData[pid] || []).find(function(s) { return String(s.id) === String(cb.value); });
+                if (seg && seg.kap) kap += seg.kap;
+            });
+        } else {
+            kap = rsExtProstorKap[pid] || 0;
+        }
+        if (kap > 0 && pocet > kap) {
+            if (!confirm('Zadal jsi víc osob, než je předpokládaná kapacita prostoru. Možná se tam tolik osob nevejde. Chceš pokračovat?')) {
+                e.preventDefault();
+            }
+        }
+    });
     function rsCelyDen(cb, prefix) {
         var casWrap = document.getElementById('rs-' + prefix + '-cas-wrap');
         var denWrap = document.getElementById('rs-' + prefix + '-den-wrap');
