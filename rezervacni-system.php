@@ -2116,7 +2116,7 @@ function rs_sekce_interni(): string {
         $dny_cs_v = [1=>'Pondělí',2=>'Úterý',3=>'Středa',4=>'Čtvrtek',5=>'Pátek',6=>'Sobota',7=>'Neděle'];
 
         echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($is_spravce ? 'Přehled interních rezervací' : 'Moje interní rezervace') . "</h4>";
-        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div style='overflow-x:auto'><table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
 
         $gv_idx = 0;
         foreach ($grps_v as $sk_id_v => $g_rez_v) {
@@ -2211,7 +2211,7 @@ function rs_sekce_interni(): string {
             }
             echo "</td></tr>";
         }
-        echo "</tbody></table></div>";
+        echo "</tbody></table></div></div>";
     }
 
     // JS
