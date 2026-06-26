@@ -2493,52 +2493,6 @@ function rs_vytvor_rezervaci_post(int $prostor_id, array $seg_ids, string $od, s
     return $rid;
 }
 
-// ═══ STÁTNÍ SVÁTKY A PRÁZDNINY ═══════════════════════════════════════════════
-
-function rs_statni_svatky(int $rok): array {
-    $o = easter_days($rok);
-    return [
-        "{$rok}-01-01" => 'Nový rok / Den obnovy samostatného českého státu',
-        date('Y-m-d', mktime(0,0,0,3,21+$o-2,$rok)) => 'Velký pátek',
-        date('Y-m-d', mktime(0,0,0,3,21+$o+1,$rok)) => 'Velikonoční pondělí',
-        "{$rok}-05-01" => 'Svátek práce',
-        "{$rok}-05-08" => 'Den vítězství',
-        "{$rok}-07-05" => 'Den slovanských věrozvěstů Cyrila a Metoděje',
-        "{$rok}-07-06" => 'Den upálení mistra Jana Husa',
-        "{$rok}-09-28" => 'Den české státnosti',
-        "{$rok}-10-28" => 'Den vzniku samostatného československého státu',
-        "{$rok}-11-17" => 'Den boje za svobodu a demokracii',
-        "{$rok}-12-24" => 'Štědrý den',
-        "{$rok}-12-25" => '1. svátek vánoční',
-        "{$rok}-12-26" => '2. svátek vánoční',
-    ];
-}
-
-function rs_prazdniny_rozsahy(int $rok): array {
-    $o = easter_days($rok);
-    $p = [
-        ['od'=>"{$rok}-07-01",'do'=>"{$rok}-08-31",'nazev'=>'Letní prázdniny'],
-        ['od'=>($rok-1).'-12-23','do'=>"{$rok}-01-02",'nazev'=>'Vánoční prázdniny'],
-        ['od'=>"{$rok}-12-23",'do'=>($rok+1).'-01-02','nazev'=>'Vánoční prázdniny'],
-        ['od'=>date('Y-m-d',mktime(0,0,0,3,21+$o-3,$rok)),'do'=>date('Y-m-d',mktime(0,0,0,3,21+$o+1,$rok)),'nazev'=>'Velikonoční prázdniny'],
-    ];
-    $rocni = [
-        2025 => [['od'=>'2025-01-31','do'=>'2025-01-31','nazev'=>'Pololetní prázdniny'],['od'=>'2025-02-17','do'=>'2025-02-21','nazev'=>'Jarní prázdniny'],['od'=>'2025-10-27','do'=>'2025-10-31','nazev'=>'Podzimní prázdniny']],
-        2026 => [['od'=>'2026-01-30','do'=>'2026-01-30','nazev'=>'Pololetní prázdniny'],['od'=>'2026-02-16','do'=>'2026-02-20','nazev'=>'Jarní prázdniny'],['od'=>'2026-10-26','do'=>'2026-10-30','nazev'=>'Podzimní prázdniny']],
-        2027 => [['od'=>'2027-01-29','do'=>'2027-01-29','nazev'=>'Pololetní prázdniny'],['od'=>'2027-03-08','do'=>'2027-03-12','nazev'=>'Jarní prázdniny'],['od'=>'2027-10-25','do'=>'2027-10-29','nazev'=>'Podzimní prázdniny']],
-        2028 => [['od'=>'2028-01-28','do'=>'2028-01-28','nazev'=>'Pololetní prázdniny'],['od'=>'2028-02-14','do'=>'2028-02-18','nazev'=>'Jarní prázdniny'],['od'=>'2028-10-23','do'=>'2028-10-27','nazev'=>'Podzimní prázdniny']],
-    ];
-    foreach ($rocni[$rok] ?? [] as $r) $p[] = $r;
-    return $p;
-}
-
-function rs_prazdniny_nazev(string $date, array $rozsahy): string {
-    foreach ($rozsahy as $r) {
-        if ($date >= $r['od'] && $date <= $r['do']) return $r['nazev'];
-    }
-    return '';
-}
-
 // ═══ FRONTEND: KALENDÁŘ [rs_kalendar] ════════════════════════════════════════
 
 add_shortcode('rs_kalendar','rs_kalendar_sc');
@@ -2618,8 +2572,20 @@ function rs_kalendar_sc(array $atts): string {
     $mesice_gen = ['','ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
     $dny_zkr    = ['','Po','Út','St','Čt','Pá','So','Ne'];
 
-    $svatky        = rs_statni_svatky($rok);
-    $prazdniny_list = rs_prazdniny_rozsahy($rok);
+    // Precompute holiday/vacation info for each day of current month from WP options
+    $svatky_data   = get_option('rs_statni_svatky_data', []); // ['MM-DD' => 'Název']
+    $velikonoce    = get_option('rs_velikonoce', []);          // ['YYYY-MM-DD' => 'Název']
+    $prazdniny_opt = get_option('rs_prazdniny', []);           // [['od','do','nazev']]
+    $den_info = [];
+    for ($d = 1; $d <= $days_in_month; $d++) {
+        $ds      = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
+        $sv      = $velikonoce[$ds] ?? ($svatky_data[substr($ds, 5)] ?? '');
+        $pr      = '';
+        foreach ($prazdniny_opt as $p) {
+            if ($ds >= $p['od'] && $ds <= $p['do']) { $pr = $p['nazev']; break; }
+        }
+        $den_info[$d] = ['sv' => $sv, 'pr' => $pr];
+    }
 
     // Sestavit data segmentů pro JS modal + foto výpis
     $rsSegData = [];
@@ -2802,10 +2768,9 @@ function rs_kalendar_sc(array $atts): string {
         echo "<div class='rs-kal-scroll' style='overflow-x:auto'>";
         echo "<table class='rs-kal-table'><thead><tr><th>Objekt/Část</th>";
         for ($d = 1; $d <= $days_in_month; $d++) {
-            $dow      = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
-            $date_str = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
-            $sv_name  = $svatky[$date_str] ?? '';
-            $pr_name  = rs_prazdniny_nazev($date_str, $prazdniny_list);
+            $dow     = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
+            $sv_name = $den_info[$d]['sv'];
+            $pr_name = $den_info[$d]['pr'];
             if ($dow >= 6) {
                 $style = ' style="background:#2e7d32"';
             } elseif ($sv_name && $pr_name) {
@@ -2832,10 +2797,9 @@ function rs_kalendar_sc(array $atts): string {
                 : esc_html($item->post_title);
             echo "<tr><td>{$seg_link}</td>";
             for ($d = 1; $d <= $days_in_month; $d++) {
-                $stav     = $busy[$tid][$d] ?? '';
-                $date_str = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
-                $sv_name  = $svatky[$date_str] ?? '';
-                $pr_name  = rs_prazdniny_nazev($date_str, $prazdniny_list);
+                $stav    = $busy[$tid][$d] ?? '';
+                $sv_name = $den_info[$d]['sv'];
+                $pr_name = $den_info[$d]['pr'];
                 if ($sv_name && $pr_name) {
                     $bg = 'background:#fef9c3;';
                 } elseif ($sv_name) {
