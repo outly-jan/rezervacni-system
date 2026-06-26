@@ -2493,6 +2493,52 @@ function rs_vytvor_rezervaci_post(int $prostor_id, array $seg_ids, string $od, s
     return $rid;
 }
 
+// ═══ STÁTNÍ SVÁTKY A PRÁZDNINY ═══════════════════════════════════════════════
+
+function rs_statni_svatky(int $rok): array {
+    $o = easter_days($rok);
+    return [
+        "{$rok}-01-01" => 'Nový rok / Den obnovy samostatného českého státu',
+        date('Y-m-d', mktime(0,0,0,3,21+$o-2,$rok)) => 'Velký pátek',
+        date('Y-m-d', mktime(0,0,0,3,21+$o+1,$rok)) => 'Velikonoční pondělí',
+        "{$rok}-05-01" => 'Svátek práce',
+        "{$rok}-05-08" => 'Den vítězství',
+        "{$rok}-07-05" => 'Den slovanských věrozvěstů Cyrila a Metoděje',
+        "{$rok}-07-06" => 'Den upálení mistra Jana Husa',
+        "{$rok}-09-28" => 'Den české státnosti',
+        "{$rok}-10-28" => 'Den vzniku samostatného československého státu',
+        "{$rok}-11-17" => 'Den boje za svobodu a demokracii',
+        "{$rok}-12-24" => 'Štědrý den',
+        "{$rok}-12-25" => '1. svátek vánoční',
+        "{$rok}-12-26" => '2. svátek vánoční',
+    ];
+}
+
+function rs_prazdniny_rozsahy(int $rok): array {
+    $o = easter_days($rok);
+    $p = [
+        ['od'=>"{$rok}-07-01",'do'=>"{$rok}-08-31",'nazev'=>'Letní prázdniny'],
+        ['od'=>($rok-1).'-12-23','do'=>"{$rok}-01-02",'nazev'=>'Vánoční prázdniny'],
+        ['od'=>"{$rok}-12-23",'do'=>($rok+1).'-01-02','nazev'=>'Vánoční prázdniny'],
+        ['od'=>date('Y-m-d',mktime(0,0,0,3,21+$o-3,$rok)),'do'=>date('Y-m-d',mktime(0,0,0,3,21+$o+1,$rok)),'nazev'=>'Velikonoční prázdniny'],
+    ];
+    $rocni = [
+        2025 => [['od'=>'2025-01-31','do'=>'2025-01-31','nazev'=>'Pololetní prázdniny'],['od'=>'2025-02-17','do'=>'2025-02-21','nazev'=>'Jarní prázdniny'],['od'=>'2025-10-27','do'=>'2025-10-31','nazev'=>'Podzimní prázdniny']],
+        2026 => [['od'=>'2026-01-30','do'=>'2026-01-30','nazev'=>'Pololetní prázdniny'],['od'=>'2026-02-16','do'=>'2026-02-20','nazev'=>'Jarní prázdniny'],['od'=>'2026-10-26','do'=>'2026-10-30','nazev'=>'Podzimní prázdniny']],
+        2027 => [['od'=>'2027-01-29','do'=>'2027-01-29','nazev'=>'Pololetní prázdniny'],['od'=>'2027-02-22','do'=>'2027-02-26','nazev'=>'Jarní prázdniny'],['od'=>'2027-10-25','do'=>'2027-10-29','nazev'=>'Podzimní prázdniny']],
+        2028 => [['od'=>'2028-01-28','do'=>'2028-01-28','nazev'=>'Pololetní prázdniny'],['od'=>'2028-02-14','do'=>'2028-02-18','nazev'=>'Jarní prázdniny'],['od'=>'2028-10-23','do'=>'2028-10-27','nazev'=>'Podzimní prázdniny']],
+    ];
+    foreach ($rocni[$rok] ?? [] as $r) $p[] = $r;
+    return $p;
+}
+
+function rs_prazdniny_nazev(string $date, array $rozsahy): string {
+    foreach ($rozsahy as $r) {
+        if ($date >= $r['od'] && $date <= $r['do']) return $r['nazev'];
+    }
+    return '';
+}
+
 // ═══ FRONTEND: KALENDÁŘ [rs_kalendar] ════════════════════════════════════════
 
 add_shortcode('rs_kalendar','rs_kalendar_sc');
@@ -2571,6 +2617,9 @@ function rs_kalendar_sc(array $atts): string {
     $mesice_cz  = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
     $mesice_gen = ['','ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
     $dny_zkr    = ['','Po','Út','St','Čt','Pá','So','Ne'];
+
+    $svatky        = rs_statni_svatky($rok);
+    $prazdniny_list = rs_prazdniny_rozsahy($rok);
 
     // Sestavit data segmentů pro JS modal + foto výpis
     $rsSegData = [];
@@ -2753,9 +2802,25 @@ function rs_kalendar_sc(array $atts): string {
         echo "<div class='rs-kal-scroll' style='overflow-x:auto'>";
         echo "<table class='rs-kal-table'><thead><tr><th>Objekt/Část</th>";
         for ($d = 1; $d <= $days_in_month; $d++) {
-            $dow   = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
-            $style = ($dow >= 6) ? ' style="background:#2e7d32"' : '';
-            echo "<th{$style}>{$d}<br><small style='font-weight:400;font-size:10px'>" . $dny_zkr[$dow] . "</small></th>";
+            $dow      = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
+            $date_str = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
+            $sv_name  = $svatky[$date_str] ?? '';
+            $pr_name  = rs_prazdniny_nazev($date_str, $prazdniny_list);
+            if ($dow >= 6) {
+                $style = ' style="background:#2e7d32"';
+            } elseif ($sv_name && $pr_name) {
+                $style = ' style="background:#fcd34d"';
+            } elseif ($sv_name) {
+                $style = ' style="background:#fef3c7"';
+            } elseif ($pr_name) {
+                $style = ' style="background:#bfdbfe"';
+            } else {
+                $style = '';
+            }
+            $ikony = '';
+            if ($sv_name) $ikony .= "<span title='" . esc_attr($sv_name) . "' style='cursor:help;display:block;font-size:8px;line-height:1.2'>⭐</span>";
+            if ($pr_name) $ikony .= "<span title='" . esc_attr($pr_name) . "' style='cursor:help;display:block;font-size:8px;line-height:1.2'>🎒</span>";
+            echo "<th{$style}>{$d}<br><small style='font-weight:400;font-size:10px'>" . $dny_zkr[$dow] . "</small>{$ikony}</th>";
         }
         echo "</tr></thead><tbody>";
 
@@ -2767,14 +2832,28 @@ function rs_kalendar_sc(array $atts): string {
                 : esc_html($item->post_title);
             echo "<tr><td>{$seg_link}</td>";
             for ($d = 1; $d <= $days_in_month; $d++) {
-                $stav = $busy[$tid][$d] ?? '';
+                $stav     = $busy[$tid][$d] ?? '';
+                $date_str = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
+                $sv_name  = $svatky[$date_str] ?? '';
+                $pr_name  = rs_prazdniny_nazev($date_str, $prazdniny_list);
+                if ($sv_name && $pr_name) {
+                    $bg = 'background:#fef9c3;';
+                } elseif ($sv_name) {
+                    $bg = 'background:#fefce8;';
+                } elseif ($pr_name) {
+                    $bg = 'background:#eff6ff;';
+                } else {
+                    $bg = '';
+                }
                 $has_detail = !empty($kal_data[$tid][$d]);
-                $click = $has_detail ? " style='cursor:pointer;position:relative' onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
-                $lupa  = $has_detail ? "<span style='position:absolute;top:1px;right:2px;font-size:7px;opacity:.55;line-height:1;pointer-events:none'>🔍</span>" : '';
-                $hod   = !empty($pending[$tid][$d]) ? "<span style='position:absolute;bottom:1px;right:2px;font-size:8px;line-height:1;pointer-events:none;opacity:.8'>⏳</span>" : '';
-                if ($stav === 'full')         echo "<td{$click}><span class='rs-kal-busy'>✕</span>{$hod}{$lupa}</td>";
-                elseif ($stav === 'partial')  echo "<td{$click}><span class='rs-kal-partial'>●</span>{$hod}{$lupa}</td>";
-                else                         echo "<td><span class='rs-kal-free'>✓</span></td>";
+                $td_style   = ($has_detail ? 'cursor:pointer;position:relative;' : ($bg ? 'position:relative;' : '')) . $bg;
+                $click      = $has_detail ? " onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
+                $td_attr    = $td_style ? " style='{$td_style}'" : '';
+                $lupa       = $has_detail ? "<span style='position:absolute;top:1px;right:2px;font-size:7px;opacity:.55;line-height:1;pointer-events:none'>🔍</span>" : '';
+                $hod        = !empty($pending[$tid][$d]) ? "<span style='position:absolute;bottom:1px;right:2px;font-size:8px;line-height:1;pointer-events:none;opacity:.8'>⏳</span>" : '';
+                if ($stav === 'full')         echo "<td{$td_attr}{$click}><span class='rs-kal-busy'>✕</span>{$hod}{$lupa}</td>";
+                elseif ($stav === 'partial')  echo "<td{$td_attr}{$click}><span class='rs-kal-partial'>●</span>{$hod}{$lupa}</td>";
+                else                         echo "<td{$td_attr}><span class='rs-kal-free'>✓</span></td>";
             }
             echo "</tr>";
         }
@@ -2788,6 +2867,8 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
         echo "<span>⏳ Čeká na schválení</span>";
+        echo "<span>⭐ Státní svátek <span style='opacity:.7'>(najetím myší zobrazí název)</span></span>";
+        echo "<span>🎒 Školní prázdniny <span style='opacity:.7'>(najetím myší zobrazí název)</span></span>";
         echo "</div>";
         $btn_href = $form_url ? esc_url($form_url) : '#';
         echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat prostory</a></div>";
