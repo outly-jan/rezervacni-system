@@ -2525,7 +2525,7 @@ function rs_prazdniny_rozsahy(int $rok): array {
     $rocni = [
         2025 => [['od'=>'2025-01-31','do'=>'2025-01-31','nazev'=>'Pololetní prázdniny'],['od'=>'2025-02-17','do'=>'2025-02-21','nazev'=>'Jarní prázdniny'],['od'=>'2025-10-27','do'=>'2025-10-31','nazev'=>'Podzimní prázdniny']],
         2026 => [['od'=>'2026-01-30','do'=>'2026-01-30','nazev'=>'Pololetní prázdniny'],['od'=>'2026-02-16','do'=>'2026-02-20','nazev'=>'Jarní prázdniny'],['od'=>'2026-10-26','do'=>'2026-10-30','nazev'=>'Podzimní prázdniny']],
-        2027 => [['od'=>'2027-01-29','do'=>'2027-01-29','nazev'=>'Pololetní prázdniny'],['od'=>'2027-02-22','do'=>'2027-02-26','nazev'=>'Jarní prázdniny'],['od'=>'2027-10-25','do'=>'2027-10-29','nazev'=>'Podzimní prázdniny']],
+        2027 => [['od'=>'2027-01-29','do'=>'2027-01-29','nazev'=>'Pololetní prázdniny'],['od'=>'2027-03-08','do'=>'2027-03-12','nazev'=>'Jarní prázdniny'],['od'=>'2027-10-25','do'=>'2027-10-29','nazev'=>'Podzimní prázdniny']],
         2028 => [['od'=>'2028-01-28','do'=>'2028-01-28','nazev'=>'Pololetní prázdniny'],['od'=>'2028-02-14','do'=>'2028-02-18','nazev'=>'Jarní prázdniny'],['od'=>'2028-10-23','do'=>'2028-10-27','nazev'=>'Podzimní prázdniny']],
     ];
     foreach ($rocni[$rok] ?? [] as $r) $p[] = $r;
