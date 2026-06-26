@@ -2835,7 +2835,7 @@ function rs_kalendar_sc(array $atts): string {
         echo "<span>🎒 Školní prázdniny <span style='opacity:.7'>(najetím myší zobrazí název)</span></span>";
         echo "</div>";
         $btn_href = $form_url ? esc_url($form_url) : '#';
-        echo "<div style='margin:20px 0 24px;text-align:center'><a href='{$btn_href}' class='rs-btn' style='font-size:16px;padding:14px 36px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.18)'>📅 Rezervovat prostory</a></div>";
+        echo "<div style='margin:24px 0 28px;text-align:center'><a href='{$btn_href}' class='rs-btn rs-btn-primary' style='font-size:18px;padding:16px 40px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,.25);letter-spacing:.3px;width:100%;max-width:360px;box-sizing:border-box'>📅 Rezervovat prostory</a></div>";
 
         // Fotky prostory a segmentů s lightbox podporou
         $fotky_p = [];
