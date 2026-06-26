@@ -2774,11 +2774,11 @@ function rs_kalendar_sc(array $atts): string {
             if ($dow >= 6) {
                 $style = ' style="background:#2e7d32"';
             } elseif ($sv_name && $pr_name) {
-                $style = ' style="background:#fcd34d"';
+                $style = ' style="background:#fcd34d;color:#333"';
             } elseif ($sv_name) {
-                $style = ' style="background:#fef3c7"';
+                $style = ' style="background:#fef3c7;color:#333"';
             } elseif ($pr_name) {
-                $style = ' style="background:#bfdbfe"';
+                $style = ' style="background:#bfdbfe;color:#333"';
             } else {
                 $style = '';
             }
