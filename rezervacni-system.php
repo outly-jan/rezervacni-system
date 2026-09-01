@@ -2521,6 +2521,14 @@ function rs_kalendar_sc(array $atts): string {
 
     $is_privileged = rs_ma_pravo('vedeni');
 
+    // Mapa prostor_id → [segment_ids] pro prostory se segmenty (prefetch, bez dalších DB dotazů v smyčce)
+    $prostor_seg_map = [];
+    foreach ($prostory as $p) {
+        if (rs_ma_segmenty($p->ID)) {
+            $prostor_seg_map[$p->ID] = array_map(fn($s) => $s->ID, rs_get_segmenty($p->ID));
+        }
+    }
+
     // Sestavit mapu obsazenosti + detail dat pro JS
     $busy    = []; // [tid][den] = 'full'|'partial'
     $pending = []; // [tid][den] = true  (má aspoň jednu rezervaci čekající na schválení)
@@ -2533,7 +2541,14 @@ function rs_kalendar_sc(array $atts): string {
         $r_do_ts  = (int)(strtotime(get_post_meta($r->ID,'rs_datum_do',true)) ?: 0);
         $typ      = get_post_meta($r->ID,'rs_typ_rezervace',true);
         $r_stav   = get_post_meta($r->ID,'rs_stav',true);
-        $target_ids = empty($segs) ? [$pid] : $segs;
+        // Rezervace bez segmentů v prostoru se segmenty → obsadí všechny segmenty
+        if (!empty($segs)) {
+            $target_ids = $segs;
+        } elseif (isset($prostor_seg_map[$pid])) {
+            $target_ids = $prostor_seg_map[$pid] ?: [$pid];
+        } else {
+            $target_ids = [$pid];
+        }
 
         $detail = [
             'od'   => $r_od_ts ? date('H:i', $r_od_ts) : '',
