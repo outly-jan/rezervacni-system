@@ -176,6 +176,7 @@ add_action('wp_ajax_nopriv_rs_ares',       'rs_ares_ajax');
 add_action('wp_ajax_rs_ares',             'rs_ares_ajax');
 add_action('wp_ajax_nopriv_rs_check_volno', 'rs_ajax_check_volno');
 add_action('wp_ajax_rs_check_volno',        'rs_ajax_check_volno');
+add_action('template_redirect',             'rs_schvalit_handler');
 function rs_ajax_check_volno(): void {
     if (!wp_verify_nonce($_POST['nonce'] ?? '', 'rs_public')) wp_send_json_error('nonce');
     $pid    = (int)($_POST['prostor_id'] ?? 0);
@@ -283,6 +284,10 @@ function rs_sprava_url(string $token): string {
     return add_query_arg('rs_sprava', $token, rtrim($base, '/') . '/');
 }
 
+function rs_schvalit_url(string $token): string {
+    return add_query_arg('rs_schvali', $token, home_url('/'));
+}
+
 function rs_prostor_label(int $prostor_id, array $seg_ids = []): string {
     $prostor = html_entity_decode(get_the_title($prostor_id), ENT_QUOTES | ENT_HTML5);
     $typ_id  = (int)get_post_meta($prostor_id, 'rs_typ_id', true);
@@ -364,6 +369,13 @@ function rs_notifikuj_nova(int $id) {
     $token      = get_post_meta($id, 'rs_token', true);
     $url        = rs_sprava_url($token);
 
+    $schvalit_token = get_post_meta($id, 'rs_schvalit_token', true);
+    if (!$schvalit_token) {
+        $schvalit_token = rs_token();
+        update_post_meta($id, 'rs_schvalit_token', $schvalit_token);
+    }
+    $schvalit_url = rs_schvalit_url($schvalit_token);
+
     if ($email) rs_mail($email, "Žádost o rezervaci přijata – {$label}",
         "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci objektu {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . rs_podpis(),
         get_option('rs_stredisko_kontakt_email', ''));
@@ -374,6 +386,7 @@ function rs_notifikuj_nova(int $id) {
             "Nová žádost o rezervaci.\n\nObjekt: {$label}\nTermín: {$od} – {$do_}\n\n"
             . ($prehled ? $prehled . "\n\n" : '')
             . "--- Žadatel ---\n" . rs_rez_udaje($id)
+            . "\n\nSchválit nebo zamítnout (bez přihlášení):\n{$schvalit_url}"
             . "\n\nAdministrace: " . rs_admin_url(),
             $email);
 }
@@ -3683,6 +3696,111 @@ function rs_render_sprava_rezervace(): string {
     </script>
     <?php
     return ob_get_clean();
+}
+
+// ═══ SCHVÁLENÍ REZERVACE PŘES TOKEN (správce, bez přihlášení) ════════════════
+
+function rs_schvalit_handler() {
+    if (!isset($_GET['rs_schvali'])) return;
+
+    $token = sanitize_text_field($_GET['rs_schvali']);
+    if (!$token) {
+        wp_die('Neplatný odkaz.');
+    }
+
+    $found = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => 1,
+        'meta_query' => [['key' => 'rs_schvalit_token', 'value' => $token, 'compare' => '=']]]);
+
+    $zprava = '';
+
+    if (!$found) {
+        status_header(200);
+        get_header();
+        rs_css();
+        echo "<div class='rs-wrap' style='max-width:680px;margin:40px auto;padding:0 16px'>";
+        echo rs_alert('Tento odkaz je neplatný nebo již byl použit. Rezervaci spravujte přes administraci.', 'error');
+        echo "<div class='rs-btn-row'><a href='" . esc_url(rs_admin_url()) . "' class='rs-btn rs-btn-primary'>Administrace rezervací</a></div>";
+        echo "</div>";
+        get_footer();
+        exit;
+    }
+
+    $rid  = $found[0]->ID;
+    $stav = get_post_meta($rid, 'rs_stav', true);
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rs_schvali_action'])) {
+        if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'rs_schvali_' . $token)) {
+            $zprava = rs_alert('Neplatný bezpečnostní token. Zkuste akci zopakovat.', 'error');
+        } elseif ($stav !== 'cekajici') {
+            $zprava = rs_alert('Tato rezervace již byla zpracována.', 'info');
+        } else {
+            $action = sanitize_key($_POST['rs_schvali_action']);
+            if ($action === 'potvrdit') {
+                $pid   = (int)get_post_meta($rid, 'rs_prostor_id', true);
+                $segs  = (array)get_post_meta($rid, 'rs_segmenty_ids', true);
+                $pocet = (int)get_post_meta($rid, 'rs_pocet_lidi', true);
+                $od    = get_post_meta($rid, 'rs_datum_od', true);
+                $do_   = get_post_meta($rid, 'rs_datum_do', true);
+                $ind   = (float)get_post_meta($rid, 'rs_cena_individualni', true);
+                $cena  = $ind > 0 ? $ind : rs_vypocti_cenu($pid, $segs, $pocet, $od, $do_);
+                update_post_meta($rid, 'rs_stav', 'potvrzena');
+                update_post_meta($rid, 'rs_cena_celkem', $cena);
+                delete_post_meta($rid, 'rs_schvalit_token');
+                rs_notifikuj_potvrzeni($rid);
+                $stav   = 'potvrzena';
+                $zprava = rs_alert('Rezervace byla potvrzena a žadatel byl informován e-mailem.');
+            } elseif ($action === 'zrusit') {
+                update_post_meta($rid, 'rs_stav', 'zrusena');
+                delete_post_meta($rid, 'rs_schvalit_token');
+                rs_notifikuj_zruseni($rid);
+                $stav   = 'zrusena';
+                $zprava = rs_alert('Rezervace byla zamítnuta a žadatel byl informován e-mailem.');
+            }
+        }
+    }
+
+    $pid   = (int)get_post_meta($rid, 'rs_prostor_id', true);
+    $segs  = array_filter((array)get_post_meta($rid, 'rs_segmenty_ids', true));
+    $od    = get_post_meta($rid, 'rs_datum_od', true);
+    $do_   = get_post_meta($rid, 'rs_datum_do', true);
+    $pocet = (int)get_post_meta($rid, 'rs_pocet_lidi', true);
+    $cena  = (float)get_post_meta($rid, 'rs_cena_celkem', true);
+
+    status_header(200);
+    get_header();
+    rs_css();
+    echo "<div class='rs-wrap' style='max-width:680px;margin:40px auto;padding:0 16px'>";
+    echo "<h2 style='margin-bottom:20px'>Schválení rezervace</h2>";
+    echo $zprava;
+
+    echo "<div class='rs-card'>";
+    echo "<h4 class='rs-card-title'>" . esc_html(rs_prostor_label($pid, $segs)) . " – " . rs_stav_badge($stav) . "</h4>";
+    echo "<table class='rs-table' style='max-width:500px'>";
+    echo "<tr><th style='width:140px'>Termín</th><td>" . esc_html(rs_format_datum($od)) . " – " . esc_html(rs_format_datum($do_)) . "</td></tr>";
+    echo "<tr><th>Počet osob</th><td>" . $pocet . "</td></tr>";
+    echo "<tr><th>Stav</th><td>" . rs_stav_badge($stav) . "</td></tr>";
+    if ($cena > 0) echo "<tr><th>Cena</th><td>" . number_format($cena, 0, '.', ' ') . " Kč</td></tr>";
+    echo "</table>";
+    echo "</div>";
+
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Údaje žadatele</h4>";
+    echo "<pre style='font-family:inherit;font-size:13px;margin:0;white-space:pre-wrap;line-height:1.6'>" . esc_html(rs_rez_udaje($rid)) . "</pre>";
+    echo "</div>";
+
+    if ($stav === 'cekajici') {
+        echo "<form method='post'>" . wp_nonce_field('rs_schvali_' . $token, '_wpnonce', true, false);
+        echo "<div class='rs-btn-row'>";
+        echo "<button type='submit' name='rs_schvali_action' value='potvrdit' class='rs-btn rs-btn-success' onclick='return confirm(\"Potvrdit rezervaci?\")'>✓ Potvrdit rezervaci</button>";
+        echo "<button type='submit' name='rs_schvali_action' value='zrusit' class='rs-btn rs-btn-danger' onclick='return confirm(\"Zamítnout rezervaci?\")'>✗ Zamítnout rezervaci</button>";
+        echo "<a href='" . esc_url(rs_admin_url()) . "' class='rs-btn rs-btn-secondary'>Administrace</a>";
+        echo "</div></form>";
+    } else {
+        echo "<div class='rs-btn-row'><a href='" . esc_url(rs_admin_url()) . "' class='rs-btn rs-btn-primary'>Administrace rezervací</a></div>";
+    }
+
+    echo "</div>";
+    get_footer();
+    exit;
 }
 
 function rs_ucastnik_row(int|string $i, array $u): string {
