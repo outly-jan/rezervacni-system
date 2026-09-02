@@ -405,10 +405,13 @@ function rs_notifikuj_potvrzeni(int $id) {
             "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} byla schválena správcem.\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     } else {
-        $cena  = (float)get_post_meta($id, 'rs_cena_celkem', true);
-        $token = get_post_meta($id, 'rs_token', true);
+        $cena     = (float)get_post_meta($id, 'rs_cena_celkem', true);
+        $token    = get_post_meta($id, 'rs_token', true);
+        $poznamka = get_post_meta($id, 'rs_spravce_poznamka', true);
         rs_mail($email, "Rezervace potvrzena – {$label}",
-            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma') . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
+            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla potvrzena.\nCena: " . ($cena > 0 ? number_format($cena, 0, ',', ' ') . ' Kč' : 'zdarma')
+            . ($poznamka ? "\n\nVzkaz od správce:\n{$poznamka}" : '')
+            . "\n\nSpráva rezervace:\n" . rs_sprava_url($token) . "\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     }
 }
@@ -3743,8 +3746,10 @@ function rs_schvalit_handler() {
                 $do_   = get_post_meta($rid, 'rs_datum_do', true);
                 $ind   = (float)get_post_meta($rid, 'rs_cena_individualni', true);
                 $cena  = $ind > 0 ? $ind : rs_vypocti_cenu($pid, $segs, $pocet, $od, $do_);
+                $poznamka_spravce = sanitize_textarea_field($_POST['rs_spravce_poznamka'] ?? '');
                 update_post_meta($rid, 'rs_stav', 'potvrzena');
                 update_post_meta($rid, 'rs_cena_celkem', $cena);
+                if ($poznamka_spravce) update_post_meta($rid, 'rs_spravce_poznamka', $poznamka_spravce);
                 delete_post_meta($rid, 'rs_schvalit_token');
                 rs_notifikuj_potvrzeni($rid);
                 $stav   = 'potvrzena';
@@ -3766,10 +3771,25 @@ function rs_schvalit_handler() {
     $pocet = (int)get_post_meta($rid, 'rs_pocet_lidi', true);
     $cena  = (float)get_post_meta($rid, 'rs_cena_celkem', true);
 
+    // Přehled rezervací stejného objektu ±30 dní od termínu
+    $win_od   = date('Y-m-d H:i:s', strtotime($od) - 30 * 86400);
+    $win_do   = date('Y-m-d H:i:s', strtotime($do_) + 30 * 86400);
+    $all_rez  = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => 'rs_prostor_id', 'value' => $pid]]]);
+    $prehled_rez = [];
+    foreach ($all_rez as $xid) {
+        if (get_post_meta($xid, 'rs_stav', true) === 'zrusena') continue;
+        $x_od = get_post_meta($xid, 'rs_datum_od', true);
+        $x_do = get_post_meta($xid, 'rs_datum_do', true);
+        if (strtotime($x_do) <= strtotime($win_od) || strtotime($x_od) >= strtotime($win_do)) continue;
+        $prehled_rez[$xid] = strtotime($x_od);
+    }
+    asort($prehled_rez);
+
     status_header(200);
     get_header();
     rs_css();
-    echo "<div class='rs-wrap' style='max-width:680px;margin:40px auto;padding:0 16px'>";
+    echo "<div class='rs-wrap' style='max-width:760px;margin:40px auto;padding:0 16px'>";
     echo "<h2 style='margin-bottom:20px'>Schválení rezervace</h2>";
     echo $zprava;
 
@@ -3787,8 +3807,32 @@ function rs_schvalit_handler() {
     echo "<pre style='font-family:inherit;font-size:13px;margin:0;white-space:pre-wrap;line-height:1.6'>" . esc_html(rs_rez_udaje($rid)) . "</pre>";
     echo "</div>";
 
+    // Přehled obsazenosti objektu ±30 dní
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Obsazenost objektu (±30 dní od termínu)</h4>";
+    if (empty($prehled_rez)) {
+        echo "<p style='color:#888;font-style:italic;margin:0'>Žádné jiné rezervace v okolí termínu.</p>";
+    } else {
+        echo "<table class='rs-table'><thead><tr><th>Od</th><th>Do</th><th>Žadatel</th><th>Stav</th></tr></thead><tbody>";
+        foreach (array_keys($prehled_rez) as $xid) {
+            $x_od   = get_post_meta($xid, 'rs_datum_od', true);
+            $x_do   = get_post_meta($xid, 'rs_datum_do', true);
+            $x_stav = get_post_meta($xid, 'rs_stav', true);
+            $x_jmeno = rs_rez_jmeno($xid);
+            $is_this = ($xid === $rid);
+            $row_style = $is_this ? " style='background:#fffde7'" : '';
+            $mark = $is_this ? ' <strong>◀ tato žádost</strong>' : '';
+            echo "<tr{$row_style}><td>" . esc_html(rs_format_datum($x_od)) . "</td><td>" . esc_html(rs_format_datum($x_do)) . "</td><td>" . esc_html($x_jmeno) . $mark . "</td><td>" . rs_stav_badge($x_stav) . "</td></tr>";
+        }
+        echo "</tbody></table>";
+    }
+    echo "</div>";
+
     if ($stav === 'cekajici') {
         echo "<form method='post'>" . wp_nonce_field('rs_schvali_' . $token, '_wpnonce', true, false);
+        echo "<div class='rs-card'><h4 class='rs-card-title'>Vzkaz objednateli (volitelné)</h4>";
+        echo "<p style='font-size:13px;color:#555;margin:0 0 8px'>Tento text bude přiložen k potvrzovacímu e-mailu objednateli.</p>";
+        echo "<textarea name='rs_spravce_poznamka' rows='4' style='width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:3px;font-family:inherit;font-size:13px;resize:vertical'></textarea>";
+        echo "</div>";
         echo "<div class='rs-btn-row'>";
         echo "<button type='submit' name='rs_schvali_action' value='potvrdit' class='rs-btn rs-btn-success' onclick='return confirm(\"Potvrdit rezervaci?\")'>✓ Potvrdit rezervaci</button>";
         echo "<button type='submit' name='rs_schvali_action' value='zrusit' class='rs-btn rs-btn-danger' onclick='return confirm(\"Zamítnout rezervaci?\")'>✗ Zamítnout rezervaci</button>";
