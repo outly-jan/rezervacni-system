@@ -2479,11 +2479,13 @@ function rs_interni_zpracuj(string $action): string {
         }
 
         $skupina_id   = rs_token();
-        $created = 0; $skipped = 0; $n_cek = 0; $n_pot = 0;
+        $created = 0; $skipped = 0; $skip_praz = 0; $skip_svat = 0; $n_cek = 0; $n_pot = 0;
         foreach ($dates as $d) {
-            $skip = in_array($d,$vyjimky,true)
-                 || ($vynechat_praz && rs_jsou_prazdniny($d))
-                 || ($vynechat_svat && rs_je_svatek($d));
+            $is_praz = $vynechat_praz && rs_jsou_prazdniny($d);
+            $is_svat = $vynechat_svat && rs_je_svatek($d);
+            $skip = in_array($d,$vyjimky,true) || $is_praz || $is_svat;
+            if ($is_praz) $skip_praz++;
+            if ($is_svat) $skip_svat++;
             if (!$skip) {
                 $od  = $d . ' ' . $cas_od . ':00';
                 $do_ = $d . ' ' . $cas_do . ':00';
@@ -2509,8 +2511,10 @@ function rs_interni_zpracuj(string $action): string {
                     get_option('rs_stredisko_kontakt_email', ''));
             }
         }
-        $msg = "Série vytvořena: {$created} rezervací.";
-        if ($skipped) $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno).";
+        $msg = "Série vytvořena: {$created} rezervací (z " . count($dates) . " nalezených termínů).";
+        if ($skipped)    $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno).";
+        if ($skip_praz)  $msg .= " Vynecháno {$skip_praz} (prázdniny).";
+        if ($skip_svat)  $msg .= " Vynecháno {$skip_svat} (státní svátky).";
         if ($n_cek && $n_pot) $msg .= " {$n_pot} termínů automaticky potvrzeno, {$n_cek} čeká na schválení (připadají na víkend, svátek nebo prázdniny – termíny primárně vyhrazené pro placený pronájem). O výsledku schválení vás informujeme e-mailem.";
         elseif ($n_cek)       $msg .= " Všechny termíny čekají na schválení – připadají na víkend, svátek nebo prázdniny (termíny primárně vyhrazené pro placený pronájem). O výsledku schválení vás informujeme e-mailem.";
         return rs_alert($msg);
