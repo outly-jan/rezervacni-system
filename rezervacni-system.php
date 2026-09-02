@@ -2,7 +2,7 @@
 /*
 Plugin Name: Rezervační systém
 Description: Rezervační systém prostor pro skautské středisko Chlumec.
-Version: 1.0.1
+Version: 1.0.2
 Author: Honza & Claude
 */
 
