@@ -144,10 +144,14 @@ function rs_stav_badge(string $stav): string {
 function rs_rez_jmeno(int $id): string {
     if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
         $nazev = get_post_meta($id, 'rs_nazev', true);
-        if ($nazev) return $nazev;
-        $uid = (int)(get_post_meta($id, 'rs_int_rezervujici_id', true) ?: get_post_meta($id, 'rs_wp_user_id', true));
-        if ($uid) { $user = get_userdata($uid); if ($user) return $user->display_name; }
-        return '–';
+        $oddil = get_post_meta($id, 'rs_oddil', true);
+        $cast  = $oddil ?: '';
+        if (!$cast) {
+            $uid = (int)(get_post_meta($id, 'rs_int_rezervujici_id', true) ?: get_post_meta($id, 'rs_wp_user_id', true));
+            if ($uid) { $user = get_userdata($uid); if ($user) $cast = $user->display_name; }
+        }
+        if ($nazev && $cast) return $nazev . ' – ' . $cast;
+        return $nazev ?: $cast ?: '–';
     }
     if (get_post_meta($id, 'rs_rez_typ', true) === 'pravnicka')
         return get_post_meta($id, 'rs_nazev', true) ?: '–';
