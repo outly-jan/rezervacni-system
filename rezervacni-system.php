@@ -84,6 +84,21 @@ function rs_potreba_schvaleni_interni(string $datum_od): bool {
     return rs_je_vikend($datum_od) || rs_je_svatek($datum_od) || rs_jsou_prazdniny($datum_od);
 }
 
+function rs_nth_weekday_of_month(int $y, int $m, int $dow, int $nth): ?string {
+    $days = (int)date('t', mktime(0, 0, 0, $m, 1, $y));
+    if ($nth === 5) {
+        for ($d = $days; $d >= 1; $d--)
+            if ((int)date('N', mktime(0, 0, 0, $m, $d, $y)) === $dow)
+                return sprintf('%04d-%02d-%02d', $y, $m, $d);
+    } else {
+        $count = 0;
+        for ($d = 1; $d <= $days; $d++)
+            if ((int)date('N', mktime(0, 0, 0, $m, $d, $y)) === $dow && ++$count === $nth)
+                return sprintf('%04d-%02d-%02d', $y, $m, $d);
+    }
+    return null;
+}
+
 function rs_je_volno(int $prostor_id, array $seg_ids, string $od, string $do, int $skip = 0): bool {
     $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids']);
     $od_ts = strtotime($od); $do_ts = strtotime($do);
@@ -2097,9 +2112,15 @@ function rs_sekce_interni(): string {
     echo "</div>";
 
     // 4b) Panel: Opakující se (skrytý)
-    $dny_zkr = ['1'=>'Po','2'=>'Út','3'=>'St','4'=>'Čt','5'=>'Pá','6'=>'So','7'=>'Ne'];
+    $dny_zkr  = ['1'=>'Po','2'=>'Út','3'=>'St','4'=>'Čt','5'=>'Pá','6'=>'So','7'=>'Ne'];
+    $dny_plne = ['1'=>'Pondělí','2'=>'Úterý','3'=>'Středa','4'=>'Čtvrtek','5'=>'Pátek','6'=>'Sobota','7'=>'Neděle'];
     echo "<div id='rs-int-panel-opak' style='display:none;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:14px;margin-bottom:14px'>";
-    echo "<p style='font-size:13px;color:#555;margin-top:0'>Opakující se rezervace se vytvoří jako jednotlivé záznamy na každý vybraný den.</p>";
+    echo "<p style='font-size:13px;color:#555;margin-top:0'>Opakující se rezervace se vytvoří jako jednotlivé záznamy na každý vybraný termín.</p>";
+    echo "<div class='rs-form-group' style='display:flex;gap:20px;margin-bottom:14px'>";
+    echo "<label style='font-weight:normal;cursor:pointer'><input type='radio' name='int_opak_rezim' value='tydenne' checked onchange='rsIntOpakRezim(\"tydenne\")'> Týdenně</label>";
+    echo "<label style='font-weight:normal;cursor:pointer'><input type='radio' name='int_opak_rezim' value='mesicne' onchange='rsIntOpakRezim(\"mesicne\")'> Měsíčně</label>";
+    echo "</div>";
+    echo "<div id='rs-int-opak-tydenne'>";
     echo "<div class='rs-form-group' style='display:flex;align-items:center;gap:8px;margin-bottom:14px'>";
     echo "<label style='white-space:nowrap;margin:0'>Opakovat každý</label>";
     echo "<input type='number' name='int_interval' value='1' min='1' max='52' style='width:56px'> týden";
@@ -2112,6 +2133,19 @@ function rs_sekce_interni(): string {
         echo esc_html($v) . "</label>";
     }
     echo "</div></div>";
+    echo "</div>";
+    echo "<div id='rs-int-opak-mesicne' style='display:none'>";
+    echo "<div class='rs-form-group' style='display:flex;align-items:center;gap:8px;flex-wrap:wrap'>";
+    echo "<label style='white-space:nowrap;margin:0'>Každý</label>";
+    echo "<select name='int_mesic_poradove' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px'>";
+    echo "<option value='1'>1. (první)</option><option value='2'>2. (druhý)</option><option value='3'>3. (třetí)</option><option value='4'>4. (čtvrtý)</option><option value='5'>poslední</option>";
+    echo "</select>";
+    echo "<select name='int_mesic_den' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px'>";
+    foreach ($dny_plne as $k => $v) echo "<option value='{$k}'>" . esc_html($v) . "</option>";
+    echo "</select>";
+    echo "<span style='white-space:nowrap'>v měsíci</span>";
+    echo "</div>";
+    echo "</div>";
     echo "<div class='rs-form-group' style='margin-bottom:6px'><label style='display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer'><input type='checkbox' name='int_opak_cely_den' style='width:auto' onchange=\"document.getElementById('rs-int-opak-cas').style.display=this.checked?'none':''\" > Celý den</label></div>";
     echo "<div id='rs-int-opak-cas' class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Čas od</label><input type='time' name='int_cas_od'></div>";
@@ -2313,6 +2347,10 @@ function rs_sekce_interni(): string {
         opak.style.display  = mode === 'opakujici'   ? '' : 'none';
         document.querySelectorAll('#rs-int-panel-jedno input[type=datetime-local]').forEach(function(i){ i.required = mode === 'jednorazova'; });
     }
+    function rsIntOpakRezim(val){
+        document.getElementById('rs-int-opak-tydenne').style.display = val === 'tydenne' ? '' : 'none';
+        document.getElementById('rs-int-opak-mesicne').style.display = val === 'mesicne' ? '' : 'none';
+    }
     var rsIntNonce = '<?php echo wp_create_nonce('rs_public'); ?>';
     var rsIntAjaxUrl = '<?php echo admin_url('admin-ajax.php'); ?>';
     var rsIntCheckVolnoTimer = null;
@@ -2393,8 +2431,7 @@ function rs_interni_zpracuj(string $action): string {
 
         // Opakující se
         $pocet        = 0;
-        $dny_tydne    = array_values(array_filter(array_map('intval', (array)($_POST['int_dny_tydne'] ?? [])), fn($d) => $d >= 1 && $d <= 7));
-        $interval     = max(1, min(52, (int)($_POST['int_interval'] ?? 1)));
+        $rezim        = sanitize_text_field($_POST['int_opak_rezim'] ?? 'tydenne');
         if (!empty($_POST['int_opak_cely_den'])) {
             $cas_od = '00:00';
             $cas_do = '23:59';
@@ -2404,7 +2441,6 @@ function rs_interni_zpracuj(string $action): string {
         }
         $serie_od     = sanitize_text_field($_POST['int_opakovani_od'] ?? '');
         $serie_do     = sanitize_text_field($_POST['int_opakovani_do'] ?? '');
-        if (empty($dny_tydne))        return rs_alert('Vyberte alespoň jeden den v týdnu.','error');
         if (!$serie_od || !$serie_do) return rs_alert('Zadejte rozsah opakování.','error');
 
         $vyjimky_raw   = sanitize_text_field($_POST['int_vyjimky'] ?? '');
@@ -2412,36 +2448,55 @@ function rs_interni_zpracuj(string $action): string {
         $vynechat_praz = isset($_POST['int_vynechat_prazdniny']);
         $vynechat_svat = isset($_POST['int_vynechat_svatky']);
 
+        // Sestavit seznam dat
+        $dates = [];
+        if ($rezim === 'mesicne') {
+            $poradove  = max(1, min(5, (int)($_POST['int_mesic_poradove'] ?? 1)));
+            $mesic_den = max(1, min(7, (int)($_POST['int_mesic_den'] ?? 2)));
+            $y = (int)date('Y', strtotime($serie_od));
+            $m = (int)date('n', strtotime($serie_od));
+            $end_y = (int)date('Y', strtotime($serie_do));
+            $end_m = (int)date('n', strtotime($serie_do));
+            while ($y < $end_y || ($y === $end_y && $m <= $end_m)) {
+                $d = rs_nth_weekday_of_month($y, $m, $mesic_den, $poradove);
+                if ($d && $d >= $serie_od && $d <= $serie_do) $dates[] = $d;
+                if (++$m > 12) { $m = 1; $y++; }
+            }
+        } else {
+            $dny_tydne    = array_values(array_filter(array_map('intval', (array)($_POST['int_dny_tydne'] ?? [])), fn($d) => $d >= 1 && $d <= 7));
+            $interval     = max(1, min(52, (int)($_POST['int_interval'] ?? 1)));
+            if (empty($dny_tydne)) return rs_alert('Vyberte alespoň jeden den v týdnu.','error');
+            $current      = strtotime($serie_od);
+            $end          = strtotime($serie_do);
+            $start_monday = $current - ((int)date('N', $current) - 1) * 86400;
+            while ($current <= $end) {
+                $dow        = (int)date('N', $current);
+                $week_index = (int)round(($current - $start_monday) / (7 * 86400));
+                if (in_array($dow, $dny_tydne, true) && $week_index % $interval === 0)
+                    $dates[] = date('Y-m-d', $current);
+                $current = strtotime('+1 day', $current);
+            }
+        }
+
         $skupina_id   = rs_token();
         $created = 0; $skipped = 0; $n_cek = 0; $n_pot = 0;
-        $current      = strtotime($serie_od);
-        $end          = strtotime($serie_do);
-        // Anchor week cycle to Monday of the start week
-        $start_monday = $current - ((int)date('N', $current) - 1) * 86400;
-
-        while ($current <= $end) {
-            $dow        = (int)date('N', $current);
-            $week_index = (int)round(($current - $start_monday) / (7 * 86400));
-            if (in_array($dow, $dny_tydne, true) && $week_index % $interval === 0) {
-                $d    = date('Y-m-d',$current);
-                $skip = in_array($d,$vyjimky,true)
-                     || ($vynechat_praz && rs_jsou_prazdniny($d))
-                     || ($vynechat_svat && rs_je_svatek($d));
-                if (!$skip) {
-                    $od  = $d . ' ' . $cas_od . ':00';
-                    $do_ = $d . ' ' . $cas_do . ':00';
-                    if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
-                        $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
-                        $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
-                        update_post_meta($rid,'rs_nazev',$nazev);
-                        update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
-                        update_post_meta($rid,'rs_oddil',$oddil);
-                        $created++;
-                        if ($stav === 'cekajici') $n_cek++; else $n_pot++;
-                    } else { $skipped++; }
-                }
+        foreach ($dates as $d) {
+            $skip = in_array($d,$vyjimky,true)
+                 || ($vynechat_praz && rs_jsou_prazdniny($d))
+                 || ($vynechat_svat && rs_je_svatek($d));
+            if (!$skip) {
+                $od  = $d . ' ' . $cas_od . ':00';
+                $do_ = $d . ' ' . $cas_do . ':00';
+                if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
+                    $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
+                    $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
+                    update_post_meta($rid,'rs_nazev',$nazev);
+                    update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
+                    update_post_meta($rid,'rs_oddil',$oddil);
+                    $created++;
+                    if ($stav === 'cekajici') $n_cek++; else $n_pot++;
+                } else { $skipped++; }
             }
-            $current = strtotime('+1 day',$current);
         }
         if ($n_cek > 0) {
             $uid_notif  = $rezervujici ?: $uid;
