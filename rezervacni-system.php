@@ -610,6 +610,7 @@ function rs_admin_sc(): string {
     }
     if (rs_ma_pravo('spravce')) echo "<button data-tab='rezervace' onclick='rsTab(\"rezervace\",this)'>Správa rezervací</button>";
     if (rs_ma_pravo('vedeni'))  echo "<button data-tab='interni'   onclick='rsTab(\"interni\",this)'  >Interní rezervace</button>";
+    if (rs_ma_pravo('vedeni'))  echo "<button data-tab='prehled'   onclick='rsTab(\"prehled\",this)'  >Přehled rezervací</button>";
     if (rs_ma_pravo('vedeni'))  echo "<button data-tab='napoveda'  onclick='rsTab(\"napoveda\",this)' >Popis aplikace</button>";
     echo "</div>";
 
@@ -623,8 +624,9 @@ function rs_admin_sc(): string {
         echo "<div id='rs-panel-nastaveni'>". rs_sekce_nastaveni(). "</div>";
     }
     if (rs_ma_pravo('spravce')) echo "<div id='rs-panel-rezervace'>". rs_sekce_rezervace() . "</div>";
-    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-interni'>"  . rs_sekce_interni()   . "</div>";
-    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-napoveda'>" . rs_sekce_napoveda()  . "</div>";
+    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-interni'>"  . rs_sekce_interni()            . "</div>";
+    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-prehled'>"  . rs_sekce_prehled_kalendar()   . "</div>";
+    if (rs_ma_pravo('vedeni'))  echo "<div id='rs-panel-napoveda'>" . rs_sekce_napoveda()            . "</div>";
     echo "</div>";
 
     echo "</div>"; // .rs-wrap
@@ -3992,4 +3994,300 @@ function rs_sekce_napoveda(): string {
 
 </div>
 <?php return ob_get_clean();
+}
+
+// ═══ SEKCE: PŘEHLED REZERVACÍ (vedení) ═══════════════════════════════════════
+
+function rs_sekce_prehled_kalendar(): string {
+    $prostory = rs_get_prostory();
+    if (empty($prostory)) return '<p>Žádné prostory nejsou zatím k dispozici.</p>';
+
+    $rok   = (int)($_GET['rs_prek_rok']   ?? date('Y'));
+    $mesic = (int)($_GET['rs_prek_mesic'] ?? date('n'));
+    if ($mesic < 1)  { $mesic = 12; $rok--; }
+    if ($mesic > 12) { $mesic = 1;  $rok++; }
+
+    $days_in_month = (int)date('t', mktime(0,0,0,$mesic,1,$rok));
+    $mesic_od = sprintf('%04d-%02d-01 00:00:00', $rok, $mesic);
+    $mesic_do = sprintf('%04d-%02d-%02d 23:59:59', $rok, $mesic, $days_in_month);
+
+    $rezervace = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,'meta_query'=>[
+        'relation'=>'AND',
+        ['key'=>'rs_stav','value'=>'zrusena','compare'=>'!='],
+        ['key'=>'rs_datum_od','value'=>$mesic_do,'compare'=>'<='],
+        ['key'=>'rs_datum_do','value'=>$mesic_od,'compare'=>'>='],
+    ]]);
+
+    $prostor_seg_map = [];
+    foreach ($prostory as $p) {
+        if (rs_ma_segmenty($p->ID)) {
+            $prostor_seg_map[$p->ID] = array_map(fn($s) => $s->ID, rs_get_segmenty($p->ID));
+        }
+    }
+
+    $busy    = [];
+    $pending = [];
+    $kal_data = [];
+
+    foreach ($rezervace as $r) {
+        $pid     = (int)get_post_meta($r->ID,'rs_prostor_id',true);
+        $segs    = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
+        $r_od_ts = (int)(strtotime(get_post_meta($r->ID,'rs_datum_od',true)) ?: 0);
+        $r_do_ts = (int)(strtotime(get_post_meta($r->ID,'rs_datum_do',true)) ?: 0);
+        $typ     = get_post_meta($r->ID,'rs_typ_rezervace',true);
+        $r_stav  = get_post_meta($r->ID,'rs_stav',true);
+        if (!empty($segs)) {
+            $target_ids = $segs;
+        } elseif (isset($prostor_seg_map[$pid])) {
+            $target_ids = $prostor_seg_map[$pid] ?: [$pid];
+        } else {
+            $target_ids = [$pid];
+        }
+        $rez_uid  = (int)get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: (int)get_post_meta($r->ID,'rs_wp_user_id',true);
+        $rez_user = get_userdata($rez_uid);
+        $skupina  = get_post_meta($r->ID,'rs_skupina_id',true);
+        $detail = [
+            'od'          => $r_od_ts ? date('H:i', $r_od_ts) : '',
+            'do'          => $r_do_ts ? date('H:i', $r_do_ts) : '',
+            'typ'         => $typ,
+            'stav'        => $r_stav,
+            'nazev'       => get_post_meta($r->ID,'rs_nazev',true),
+            'rezervujici' => $rez_user ? $rez_user->display_name : '',
+            'oddil'       => get_post_meta($r->ID,'rs_oddil',true),
+            'poznamka'    => get_post_meta($r->ID,'rs_poznamka',true),
+            'opakuje'     => !empty($skupina),
+        ];
+        for ($d = 1; $d <= $days_in_month; $d++) {
+            $day_start = mktime(0,0,0,$mesic,$d,$rok);
+            $day_end   = mktime(23,59,0,$mesic,$d,$rok);
+            if ($r_od_ts <= $day_end && $r_do_ts >= $day_start) {
+                $coverage = ($r_od_ts <= $day_start && $r_do_ts >= $day_end) ? 'full' : 'partial';
+                foreach ($target_ids as $tid) {
+                    if (empty($busy[$tid][$d]) || ($busy[$tid][$d] === 'partial' && $coverage === 'full')) {
+                        $busy[$tid][$d] = $coverage;
+                    }
+                    if ($r_stav === 'cekajici') $pending[$tid][$d] = true;
+                    $kal_data[$tid][$d][] = $detail;
+                }
+            }
+        }
+    }
+
+    $mesice_cz  = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+    $dny_zkr    = ['','Po','Út','St','Čt','Pá','So','Ne'];
+    $svatky_data   = get_option('rs_statni_svatky_data', []);
+    $velikonoce    = get_option('rs_velikonoce', []);
+    $prazdniny_opt = get_option('rs_prazdniny', []);
+    $den_info = [];
+    for ($d = 1; $d <= $days_in_month; $d++) {
+        $ds  = sprintf('%04d-%02d-%02d', $rok, $mesic, $d);
+        $sv  = $velikonoce[$ds] ?? ($svatky_data[substr($ds, 5)] ?? '');
+        $pr  = '';
+        foreach ($prazdniny_opt as $pp) {
+            if ($ds >= $pp['od'] && $ds <= $pp['do']) { $pr = $pp['nazev']; break; }
+        }
+        $den_info[$d] = ['sv' => $sv, 'pr' => $pr];
+    }
+
+    $current_url = (is_ssl() ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    $current_url = remove_query_arg(['rs_prek_rok','rs_prek_mesic'], $current_url);
+    $prev_rok   = $mesic === 1  ? $rok - 1 : $rok;
+    $prev_mesic = $mesic === 1  ? 12       : $mesic - 1;
+    $next_rok   = $mesic === 12 ? $rok + 1 : $rok;
+    $next_mesic = $mesic === 12 ? 1        : $mesic + 1;
+    $prev_url   = add_query_arg(['rs_prek_rok' => $prev_rok, 'rs_prek_mesic' => $prev_mesic], $current_url) . '#rs-prehled';
+    $next_url   = add_query_arg(['rs_prek_rok' => $next_rok, 'rs_prek_mesic' => $next_mesic], $current_url) . '#rs-prehled';
+
+    ob_start();
+    echo "<div id='rs-prehled' style='margin-top:4px'>";
+
+    // Object tab bar
+    echo "<div style='display:flex;flex-wrap:wrap;gap:0;border-bottom:2px solid #1a5c2a;margin-bottom:0'>";
+    foreach ($prostory as $i => $p) {
+        $a   = ($i === 0);
+        $typ = '';
+        $tid_p = (int)get_post_meta($p->ID,'rs_typ_id',true);
+        if ($tid_p) $typ = get_the_title($tid_p);
+        $lbl = "<span style='display:block;line-height:1.2'>" . esc_html($p->post_title) . "</span>";
+        if ($typ) $lbl .= "<span style='display:block;font-size:11px;font-weight:400;opacity:" . ($a ? '.8' : '.65') . ";margin-top:2px'>" . esc_html($typ) . "</span>";
+        echo "<button data-preh-tab='" . (int)$p->ID . "' onclick='rsPrehTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:none;background:" . ($a ? '#f4f8f4' : '#1a5c2a') . ";color:" . ($a ? '#1a5c2a' : '#fff') . ";text-align:left'>{$lbl}</button>";
+    }
+    echo "</div>";
+
+    // Object panels
+    foreach ($prostory as $i => $p) {
+        echo "<div id='rs-preh-panel-" . (int)$p->ID . "' data-preh-panel style='padding-top:16px;margin-bottom:28px" . ($i > 0 ? ";display:none" : "") . "'>";
+        $items = rs_ma_segmenty($p->ID) ? rs_get_segmenty($p->ID) : [$p];
+
+        // Navigation
+        echo "<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px'>";
+        echo "<a href='" . esc_url($prev_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>← Předchozí</a>";
+        echo "<form method='get' action='#rs-prehled' style='display:flex;gap:6px;align-items:center'>";
+        foreach (['page_id','p','pagename','post_type'] as $k)
+            if (isset($_GET[$k]) && is_string($_GET[$k]))
+                echo "<input type='hidden' name='" . esc_attr($k) . "' value='" . esc_attr($_GET[$k]) . "'>";
+        echo "<select name='rs_prek_mesic' onchange='rsPrehKalNav(this)' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        for ($m = 1; $m <= 12; $m++) {
+            $sel = ($m === $mesic) ? ' selected' : '';
+            echo "<option value='{$m}'{$sel}>" . $mesice_cz[$m] . "</option>";
+        }
+        echo "</select>";
+        echo "<select name='rs_prek_rok' onchange='rsPrehKalNav(this)' style='padding:4px 8px;border:1px solid #8c8f94;border-radius:3px;font-size:13px'>";
+        for ($y = (int)date('Y') - 2; $y <= (int)date('Y') + 5; $y++) {
+            $sel = ($y === $rok) ? ' selected' : '';
+            echo "<option value='{$y}'{$sel}>{$y}</option>";
+        }
+        echo "</select>";
+        echo "</form>";
+        echo "<a href='" . esc_url($next_url) . "' class='rs-btn rs-btn-secondary rs-btn-sm'>Následující →</a>";
+        echo "</div>";
+        echo "<p style='font-weight:600;color:#1a5c2a;margin:0 0 6px'>" . esc_html($mesice_cz[$mesic]) . " " . $rok . "</p>";
+
+        // Calendar table
+        echo "<div data-preh-scroll-wrap style='position:relative'>";
+        echo "<div class='rs-kal-scroll' style='overflow-x:auto'>";
+        echo "<table class='rs-kal-table'><thead><tr><th>Objekt/Část</th>";
+        for ($d = 1; $d <= $days_in_month; $d++) {
+            $dow     = (int)date('N', mktime(0,0,0,$mesic,$d,$rok));
+            $sv_name = $den_info[$d]['sv'];
+            $pr_name = $den_info[$d]['pr'];
+            if ($dow >= 6) {
+                $style = ' style="background:#2e7d32"';
+            } elseif ($sv_name && $pr_name) {
+                $style = ' style="background:#fcd34d;color:#333"';
+            } elseif ($sv_name) {
+                $style = ' style="background:#fef3c7;color:#333"';
+            } elseif ($pr_name) {
+                $style = ' style="background:#bfdbfe;color:#333"';
+            } else {
+                $style = '';
+            }
+            $ikony = '';
+            if ($sv_name) $ikony .= "<span title='" . esc_attr($sv_name) . "' style='cursor:help;display:block;font-size:8px;line-height:1.2'>⭐</span>";
+            if ($pr_name) $ikony .= "<span title='" . esc_attr($pr_name) . "' style='cursor:help;display:block;font-size:8px;line-height:1.2'>🎒</span>";
+            echo "<th{$style}>{$d}<br><small style='font-weight:400;font-size:10px'>" . $dny_zkr[$dow] . "</small>{$ikony}</th>";
+        }
+        echo "</tr></thead><tbody>";
+        foreach ($items as $item) {
+            $tid = $item->ID;
+            echo "<tr><td>" . esc_html($item->post_title) . "</td>";
+            for ($d = 1; $d <= $days_in_month; $d++) {
+                $stav    = $busy[$tid][$d] ?? '';
+                $sv_name = $den_info[$d]['sv'];
+                $pr_name = $den_info[$d]['pr'];
+                if ($sv_name && $pr_name)     { $bg = 'background:#fef9c3;'; }
+                elseif ($sv_name)              { $bg = 'background:#fefce8;'; }
+                elseif ($pr_name)              { $bg = 'background:#eff6ff;'; }
+                else                           { $bg = ''; }
+                $has_detail = !empty($kal_data[$tid][$d]);
+                $td_style   = ($has_detail ? 'cursor:pointer;position:relative;' : ($bg ? 'position:relative;' : '')) . $bg;
+                $click      = $has_detail ? " onclick='rsPrehKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
+                $td_attr    = $td_style ? " style='{$td_style}'" : '';
+                $lupa       = $has_detail ? "<span style='position:absolute;top:1px;right:2px;font-size:7px;opacity:.55;line-height:1;pointer-events:none'>🔍</span>" : '';
+                $hod        = !empty($pending[$tid][$d]) ? "<span style='position:absolute;bottom:1px;right:2px;font-size:8px;line-height:1;pointer-events:none;opacity:.8'>⏳</span>" : '';
+                if ($stav === 'full')        echo "<td{$td_attr}{$click}><span class='rs-kal-busy'>✕</span>{$hod}{$lupa}</td>";
+                elseif ($stav === 'partial') echo "<td{$td_attr}{$click}><span class='rs-kal-partial'>●</span>{$hod}{$lupa}</td>";
+                else                        echo "<td{$td_attr}><span class='rs-kal-free'>✓</span></td>";
+            }
+            echo "</tr>";
+        }
+        echo "</tbody></table></div>"; // .rs-kal-scroll
+        $arr_btn = "background:rgba(255,255,255,.95);border:1px solid #ccc;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;color:#1a5c2a;pointer-events:all;flex-shrink:0;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.15)";
+        echo "<div class='rs-preh-ind rs-preh-ind-r' style='position:absolute;top:0;right:0;bottom:0;width:72px;background:linear-gradient(to right,transparent,rgba(255,255,255,.85));pointer-events:none;display:flex;align-items:center;justify-content:flex-end;padding-right:8px'><button onclick='rsPrehKalScrollDir(this,1)' style='{$arr_btn}'>&#8250;</button></div>";
+        echo "<div class='rs-preh-ind rs-preh-ind-l' style='position:absolute;top:0;left:0;bottom:0;width:72px;background:linear-gradient(to left,transparent,rgba(255,255,255,.85));pointer-events:none;display:none;align-items:center;justify-content:flex-start;padding-left:8px'><button onclick='rsPrehKalScrollDir(this,-1)' style='{$arr_btn}'>&#8249;</button></div>";
+        echo "</div>"; // [data-preh-scroll-wrap]
+
+        // Legend
+        echo "<div style='margin:6px 0 10px;font-size:12px;color:#666;display:flex;gap:8px 18px;flex-wrap:wrap'>";
+        echo "<span><span class='rs-kal-free' style='font-size:11px;width:18px;height:18px;line-height:18px'>✓</span> Volno</span>";
+        echo "<span><span class='rs-kal-partial' style='font-size:13px;width:18px;height:18px;line-height:18px'>●</span> Částečně obsazeno <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
+        echo "<span><span class='rs-kal-busy' style='font-size:11px;width:18px;height:18px;line-height:18px'>✕</span> Obsazeno celý den <span style='opacity:.7'>(🔍 kliknutím detail)</span></span>";
+        echo "<span>⏳ Čeká na schválení</span>";
+        echo "<span>⭐ Státní svátek</span>";
+        echo "<span>🎒 Školní prázdniny</span>";
+        echo "</div>";
+        echo "</div>"; // rs-preh-panel-*
+    }
+
+    // Modal
+    echo "<div id='rs-preh-modal' style='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;align-items:center;justify-content:center'>";
+    echo "<div style='background:#fff;border-radius:6px;padding:24px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto;position:relative'>";
+    echo "<button onclick='document.getElementById(\"rs-preh-modal\").style.display=\"none\"' style='position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:#666'>✕</button>";
+    echo "<h4 id='rs-preh-modal-title' style='margin:0 0 16px;color:#1a5c2a'></h4>";
+    echo "<div id='rs-preh-modal-body'></div>";
+    echo "</div></div>";
+
+    $kal_json = wp_json_encode($kal_data);
+    $mesice_gen_json = wp_json_encode(['','ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince']);
+    ?>
+    <script>
+    var rsPrehKalData = <?php echo $kal_json; ?>;
+    var rsPrehMesiceGen = <?php echo $mesice_gen_json; ?>;
+    if (typeof escHtml === 'undefined') { function escHtml(s){ var d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; } }
+    function rsPrehTab(pid) {
+        document.querySelectorAll('[data-preh-panel]').forEach(function(el) { el.style.display = 'none'; });
+        document.querySelectorAll('[data-preh-tab]').forEach(function(btn) {
+            var active = btn.getAttribute('data-preh-tab') == pid;
+            btn.style.background = active ? '#f4f8f4' : '#1a5c2a';
+            btn.style.color      = active ? '#1a5c2a' : '#fff';
+        });
+        var panel = document.getElementById('rs-preh-panel-' + pid);
+        if (panel) panel.style.display = '';
+    }
+    function rsPrehKalDetail(tid, den, nazevProstoru, rok, mesic) {
+        var items = (rsPrehKalData[tid] && rsPrehKalData[tid][den]) ? rsPrehKalData[tid][den] : [];
+        var title = den + '. ' + rsPrehMesiceGen[mesic] + ' ' + rok + ' – ' + nazevProstoru;
+        document.getElementById('rs-preh-modal-title').textContent = title;
+        var html = '';
+        items.forEach(function(r) {
+            var stavText  = r.stav === 'cekajici' ? '⏳ čeká na schválení' : 'obsazeno';
+            var stavColor = r.stav === 'cekajici' ? '#b06000' : '#c0392b';
+            html += '<div style="border:1px solid #e0e0e0;border-radius:4px;padding:12px;margin-bottom:10px">';
+            html += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">🕐 ' + r.od + ' – ' + r.do + ' <span style="font-weight:normal;color:' + stavColor + '">' + stavText + '</span></div>';
+            if (r.nazev)       html += '<div style="margin-bottom:3px"><strong>Název:</strong> ' + escHtml(r.nazev) + '</div>';
+            if (r.rezervujici) html += '<div style="margin-bottom:3px"><strong>Rezervující:</strong> ' + escHtml(r.rezervujici) + '</div>';
+            if (r.oddil)       html += '<div style="margin-bottom:3px"><strong>Součást střediska:</strong> ' + escHtml(r.oddil) + '</div>';
+            if (r.poznamka)    html += '<div style="margin-bottom:3px"><strong>Poznámka:</strong> ' + escHtml(r.poznamka) + '</div>';
+            if (r.opakuje)     html += '<div style="margin-bottom:3px;color:#1a5c2a"><strong>🔁 Část opakující se série</strong></div>';
+            var typLabel = r.typ === 'interni' ? 'Interní' : 'Externí';
+            html += '<div style="margin-top:6px"><span style="font-size:11px;background:#e8f5e9;color:#1a5c2a;padding:2px 6px;border-radius:3px">' + typLabel + '</span></div>';
+            html += '</div>';
+        });
+        if (!html) html = '<p style="color:#777">Žádné detaily k zobrazení.</p>';
+        document.getElementById('rs-preh-modal-body').innerHTML = html;
+        var modal = document.getElementById('rs-preh-modal');
+        modal.style.display = 'flex';
+        modal.onclick = function(e) { if (e.target === this) this.style.display = 'none'; };
+    }
+    function rsPrehKalNav(sel) {
+        var data = new URLSearchParams(new FormData(sel.form));
+        data.set(sel.name, sel.value);
+        window.location.href = window.location.pathname + '?' + data.toString() + '#rs-prehled';
+    }
+    function rsPrehKalScrollDir(btn, dir) {
+        var wrap = btn.closest('[data-preh-scroll-wrap]');
+        if (!wrap) return;
+        wrap.querySelector('.rs-kal-scroll').scrollBy({ left: dir * 150, behavior: 'smooth' });
+    }
+    function rsPrehKalScrollUpdate(wrap) {
+        var scr = wrap.querySelector('.rs-kal-scroll');
+        var indR = wrap.querySelector('.rs-preh-ind-r');
+        var indL = wrap.querySelector('.rs-preh-ind-l');
+        var overflows = scr.scrollWidth > scr.clientWidth + 2;
+        indR.style.display = (overflows && scr.scrollLeft + scr.clientWidth < scr.scrollWidth - 2) ? 'flex' : 'none';
+        indL.style.display = scr.scrollLeft > 2 ? 'flex' : 'none';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-preh-scroll-wrap]').forEach(function(wrap) {
+            wrap.querySelector('.rs-kal-scroll').addEventListener('scroll', function() { rsPrehKalScrollUpdate(wrap); });
+            rsPrehKalScrollUpdate(wrap);
+        });
+        window.addEventListener('resize', function() {
+            document.querySelectorAll('[data-preh-scroll-wrap]').forEach(rsPrehKalScrollUpdate);
+        });
+    });
+    </script>
+    <?php
+    echo "</div>"; // #rs-prehled
+    return ob_get_clean();
 }
