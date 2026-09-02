@@ -351,12 +351,12 @@ function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $no
 }
 
 function rs_podpis(): string {
-    $base  = "S pozdravem\nSkaut Chlumec nad Cidlinou, středisko Černého havrana";
+    $org   = "Skaut Chlumec nad Cidlinou, středisko Černého havrana";
     $jmeno = get_option('rs_stredisko_kontakt_jmeno', '');
     $mobil = get_option('rs_stredisko_kontakt_mobil', '');
     $email = get_option('rs_stredisko_kontakt_email', '');
-    $radky = array_filter([$jmeno, $mobil, $email]);
-    return $radky ? $base . "\n" . implode("\n", $radky) : $base;
+    $radky = array_filter([$jmeno, $org, $mobil, $email]);
+    return "S pozdravem\n" . implode("\n", $radky);
 }
 
 function rs_rez_get_email(int $id): string {
