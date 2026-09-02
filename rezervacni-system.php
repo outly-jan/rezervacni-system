@@ -2480,6 +2480,7 @@ function rs_interni_zpracuj(string $action): string {
 
         $skupina_id   = rs_token();
         $created = 0; $skipped = 0; $skip_praz = 0; $skip_svat = 0; $n_cek = 0; $n_pot = 0;
+        $skipped_dates = [];
         foreach ($dates as $d) {
             $is_praz = $vynechat_praz && rs_jsou_prazdniny($d);
             $is_svat = $vynechat_svat && rs_je_svatek($d);
@@ -2497,7 +2498,7 @@ function rs_interni_zpracuj(string $action): string {
                     update_post_meta($rid,'rs_oddil',$oddil);
                     $created++;
                     if ($stav === 'cekajici') $n_cek++; else $n_pot++;
-                } else { $skipped++; }
+                } else { $skipped++; $skipped_dates[] = $d; }
             }
         }
         if ($n_cek > 0) {
@@ -2512,7 +2513,7 @@ function rs_interni_zpracuj(string $action): string {
             }
         }
         $msg = "Série vytvořena: {$created} rezervací (z " . count($dates) . " nalezených termínů).";
-        if ($skipped)    $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno).";
+        if ($skipped)    $msg .= " Přeskočeno {$skipped} (kolize nebo obsazeno): " . implode(', ', $skipped_dates) . ".";
         if ($skip_praz)  $msg .= " Vynecháno {$skip_praz} (prázdniny).";
         if ($skip_svat)  $msg .= " Vynecháno {$skip_svat} (státní svátky).";
         if ($n_cek && $n_pot) $msg .= " {$n_pot} termínů automaticky potvrzeno, {$n_cek} čeká na schválení (připadají na víkend, svátek nebo prázdniny – termíny primárně vyhrazené pro placený pronájem). O výsledku schválení vás informujeme e-mailem.";
