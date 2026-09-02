@@ -555,7 +555,20 @@ function rs_css() { ?>
 .rs-kal-busy{display:inline-block;background:#f8d7da;color:#721c24;font-size:13px;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center}
 .rs-kal-partial{display:inline-block;background:#fff3cd;color:#e65c00;font-size:16px;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center}
 .rs-kal-table td[onclick]{cursor:pointer}.rs-kal-table td[onclick]:hover{background:#f0f4f0}
-@media(max-width:640px){.rs-menu{flex-direction:column;border-bottom:none}.rs-menu button{border-radius:3px;border-bottom:1px solid #ccc;margin-bottom:2px}.rs-panels{border-top:3px solid #1a5c2a}.rs-form-group input,.rs-form-group select,.rs-form-group textarea{max-width:100%}}
+@media(max-width:640px){.rs-menu{flex-direction:column;border-bottom:none}.rs-menu button{border-radius:3px;border-bottom:1px solid #ccc;margin-bottom:2px}.rs-panels{border-top:3px solid #1a5c2a}.rs-form-group input,.rs-form-group select,.rs-form-group textarea{max-width:100%}
+table.rs-table.rs-resp,table.rs-table.rs-resp tbody{display:block}
+table.rs-table.rs-resp thead{display:none}
+table.rs-table.rs-resp tr{display:block;border:1px solid #ddd;border-radius:6px;margin-bottom:10px;padding:6px 10px;background:#fff}
+table.rs-table.rs-resp tr:nth-child(even) td,table.rs-table.rs-resp tr:hover td{background:transparent}
+table.rs-table.rs-resp td{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:5px 0;border:none;border-bottom:1px solid #f0f0f0;font-size:13px}
+table.rs-table.rs-resp td:last-child{border-bottom:none;padding-bottom:0}
+table.rs-table.rs-resp td::before{content:attr(data-label);font-weight:600;color:#555;min-width:38%;font-size:12px;flex-shrink:0;padding-top:1px}
+table.rs-table.rs-resp td[data-label=""]::before{display:none}
+table.rs-table.rs-resp td[data-label=""]{justify-content:flex-end}
+table.rs-table.rs-resp tr.rs-child-row{border:none;border-top:1px dashed #e0e0e0;border-radius:0;margin-bottom:0;padding:3px 6px 3px 18px;background:#f8faf8!important}
+table.rs-table.rs-resp tr.rs-child-row td{display:inline-flex;border:none;padding:2px 4px;font-size:12px;min-width:0}
+table.rs-table.rs-resp tr.rs-child-row td::before{display:none}
+table.rs-table.rs-resp tr.rs-child-row td:empty{display:none}}
 </style>
 <?php }
 
@@ -1712,18 +1725,18 @@ function rs_sekce_rezervace(): string {
 
         if (empty($rezervace)) { echo rs_alert('Žádné rezervace.','info'); return ob_get_clean(); }
 
-        echo "<table class='rs-table'><thead><tr><th>Žadatel</th><th>Objekt</th><th>Od</th><th>Do</th><th>Osob</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div style='overflow-x:auto'><table class='rs-table rs-resp'><thead><tr><th>Žadatel</th><th>Objekt</th><th>Od</th><th>Do</th><th>Osob</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
         foreach ($rezervace as $r) {
             $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
             $stav    = get_post_meta($r->ID,'rs_stav',true);
             echo "<tr>";
-            echo "<td>" . esc_html(rs_rez_jmeno($r->ID)) . "</td>";
-            echo "<td>" . esc_html($prostor) . "</td>";
-            echo "<td>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_od',true))) . "</td>";
-            echo "<td>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_do',true))) . "</td>";
-            echo "<td>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
-            echo "<td>" . rs_stav_badge($stav) . "</td>";
-            echo "<td>";
+            echo "<td data-label='Žadatel'>" . esc_html(rs_rez_jmeno($r->ID)) . "</td>";
+            echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
+            echo "<td data-label='Od'>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_od',true))) . "</td>";
+            echo "<td data-label='Do'>" . esc_html(rs_format_datum(get_post_meta($r->ID,'rs_datum_do',true))) . "</td>";
+            echo "<td data-label='Osob'>" . (int)get_post_meta($r->ID,'rs_pocet_lidi',true) . "</td>";
+            echo "<td data-label='Stav'>" . rs_stav_badge($stav) . "</td>";
+            echo "<td data-label=''>";
             echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
             if ($stav === 'cekajici') {
                 echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
@@ -1741,7 +1754,7 @@ function rs_sekce_rezervace(): string {
             }
             echo "</td></tr>";
         }
-        echo "</tbody></table>";
+        echo "</tbody></table></div>";
 
     } else {
         // ── INTERNÍ: skupinové zobrazení ─────────────────────────────────────
@@ -1766,7 +1779,7 @@ function rs_sekce_rezervace(): string {
 
         if (empty($groups) && empty($singles)) { echo rs_alert('Žádné rezervace.','info'); return ob_get_clean(); }
 
-        echo "<table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást střediska</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div style='overflow-x:auto'><table class='rs-table rs-resp'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást střediska</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
 
         $g_idx = 0;
         foreach ($groups as $sk_id => $g_rez) {
@@ -1796,16 +1809,16 @@ function rs_sekce_rezervace(): string {
                 . "\nod " . ($ts_first ? date('j. n. Y',$ts_first) : '') . ' do ' . ($ts_last ? date('j. n. Y',$ts_last) : '');
 
             echo "<tr style='background:#eef3ee;cursor:pointer' onclick='rsGrpToggle(\"" . esc_js($gid) . "\")'>";
-            echo "<td><span id='{$gid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev) . "</strong> <span style='color:#777;font-size:12px'>({$count}×)</span></td>";
-            echo "<td>" . esc_html($prostor) . "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_str)) . "</td>";
-            echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
-            echo "<td>" . esc_html($oddil ?: '–') . "</td>";
-            echo "<td style='white-space:nowrap'>";
+            echo "<td data-label='Název'><span id='{$gid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev) . "</strong> <span style='color:#777;font-size:12px'>({$count}×)</span></td>";
+            echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_str)) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($user ? $user->display_name : '–') . "</td>";
+            echo "<td data-label='Součást'>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td data-label='Stav' style='white-space:nowrap'>";
             if ($n_pot) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#1a5c2a;color:#fff;margin-right:2px'>{$n_pot}✓</span>";
             if ($n_cek) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#f59e0b;color:#fff;margin-right:2px'>{$n_cek}⏳</span>";
             if ($n_zru) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#aaa;color:#fff'>{$n_zru}✕</span>";
-            echo "</td><td onclick='event.stopPropagation()'>";
+            echo "</td><td data-label='' onclick='event.stopPropagation()'>";
             if ($n_cek) {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Potvrdit všechny čekající termíny série ({$n_cek})?\")'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_rez_action' value='potvrdit_skupinu_admin'><input type='hidden' name='skupina_id' value='" . esc_attr($sk_id) . "'>";
@@ -1827,9 +1840,9 @@ function rs_sekce_rezervace(): string {
                 $r_stav  = get_post_meta($r->ID,'rs_stav',true);
                 $r_od    = get_post_meta($r->ID,'rs_datum_od',true);
                 $opacity = $r_stav === 'zrusena' ? 'opacity:.5;' : '';
-                echo "<tr class='{$gid}' style='display:none;background:#f8faf8;{$opacity}'>";
+                echo "<tr class='{$gid} rs-child-row' style='display:none;background:#f8faf8;{$opacity}'>";
                 $r_do_raw = get_post_meta($r->ID,'rs_datum_do',true);
-                echo "<td style='padding-left:26px;font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od)) . "</td>";
+                echo "<td style='font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od)) . "</td>";
                 echo "<td></td>";
                 echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin($r_od, $r_do_raw))) . "</td>";
                 echo "<td></td><td></td>";
@@ -1863,13 +1876,13 @@ function rs_sekce_rezervace(): string {
             $user    = get_userdata($uid);
             echo "<tr>";
             $s_termin = rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true));
-            echo "<td>" . esc_html($nazev) . "</td>";
-            echo "<td>" . esc_html($prostor) . "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($s_termin)) . "</td>";
-            echo "<td>" . esc_html($user ? $user->display_name : '–') . "</td>";
-            echo "<td>" . esc_html($oddil ?: '–') . "</td>";
-            echo "<td>" . rs_stav_badge($stav) . "</td>";
-            echo "<td>";
+            echo "<td data-label='Název'>" . esc_html($nazev) . "</td>";
+            echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($s_termin)) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($user ? $user->display_name : '–') . "</td>";
+            echo "<td data-label='Součást'>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td data-label='Stav'>" . rs_stav_badge($stav) . "</td>";
+            echo "<td data-label=''>";
             echo "<a href='" . esc_url(add_query_arg('rs_rez_detail',$r->ID)) . "' class='rs-btn rs-btn-sm rs-btn-secondary'>Detail</a> ";
             if ($stav === 'cekajici') {
                 echo "<form method='post' style='display:inline'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
@@ -1888,7 +1901,7 @@ function rs_sekce_rezervace(): string {
             echo "</td></tr>";
         }
 
-        echo "</tbody></table>";
+        echo "</tbody></table></div>";
         ?>
         <script>
         function rsGrpToggle(gid){
@@ -2179,7 +2192,7 @@ function rs_sekce_interni(): string {
         $dny_cs_v = [1=>'Pondělí',2=>'Úterý',3=>'Středa',4=>'Čtvrtek',5=>'Pátek',6=>'Sobota',7=>'Neděle'];
 
         echo "<div class='rs-card'><h4 class='rs-card-title'>" . ($is_spravce ? 'Přehled interních rezervací' : 'Moje interní rezervace') . "</h4>";
-        echo "<div style='overflow-x:auto'><table class='rs-table'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
+        echo "<div style='overflow-x:auto'><table class='rs-table rs-resp'><thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást</th><th>Stav</th><th>Akce</th></tr></thead><tbody>";
 
         $gv_idx = 0;
         foreach ($grps_v as $sk_id_v => $g_rez_v) {
@@ -2211,16 +2224,16 @@ function rs_sekce_interni(): string {
             if ($segs_v) $prostor_label_v .= " <em style='font-size:12px;color:#777'>(" . implode(', ', array_map('get_the_title',$segs_v)) . ")</em>";
 
             echo "<tr style='background:#eef3ee;cursor:pointer' onclick='rsGrpToggle(\"" . esc_js($gvid) . "\")'>";
-            echo "<td><span id='{$gvid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev_v) . "</strong> <span style='color:#777;font-size:12px'>({$count_v}×)</span></td>";
-            echo "<td>{$prostor_label_v}</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_v)) . "</td>";
-            echo "<td>" . esc_html($rez_user_v ? $rez_user_v->display_name : '–') . "</td>";
-            echo "<td>" . esc_html($oddil_v ?: '–') . "</td>";
-            echo "<td style='white-space:nowrap'>";
+            echo "<td data-label='Název'><span id='{$gvid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev_v) . "</strong> <span style='color:#777;font-size:12px'>({$count_v}×)</span></td>";
+            echo "<td data-label='Objekt'>{$prostor_label_v}</td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin_v)) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($rez_user_v ? $rez_user_v->display_name : '–') . "</td>";
+            echo "<td data-label='Součást'>" . esc_html($oddil_v ?: '–') . "</td>";
+            echo "<td data-label='Stav' style='white-space:nowrap'>";
             if ($nv_pot) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#1a5c2a;color:#fff;margin-right:2px'>{$nv_pot}✓</span>";
             if ($nv_cek) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#f59e0b;color:#fff;margin-right:2px'>{$nv_cek}⏳</span>";
             if ($nv_zru) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#aaa;color:#fff'>{$nv_zru}✕</span>";
-            echo "</td><td onclick='event.stopPropagation()'>";
+            echo "</td><td data-label='' onclick='event.stopPropagation()'>";
             if ($has_v && $own_v) {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit celou sérii ({$count_v} termínů)?\")'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_int_action' value='zrusit_skupinu'><input type='hidden' name='int_skupina_id' value='" . esc_attr($sk_id_v) . "'>";
@@ -2234,8 +2247,8 @@ function rs_sekce_interni(): string {
                 $r_do_v   = get_post_meta($r->ID,'rs_datum_do',true);
                 $r_uid_v  = (int)get_post_meta($r->ID,'rs_wp_user_id',true);
                 $opacity_v = $r_stav_v === 'zrusena' ? 'opacity:.5;' : '';
-                echo "<tr class='{$gvid}' style='display:none;background:#f8faf8;{$opacity_v}'>";
-                echo "<td style='padding-left:26px;font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od_v)) . "</td>";
+                echo "<tr class='{$gvid} rs-child-row' style='display:none;background:#f8faf8;{$opacity_v}'>";
+                echo "<td style='font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od_v)) . "</td>";
                 echo "<td></td>";
                 echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin($r_od_v, $r_do_v))) . "</td>";
                 echo "<td></td><td></td>";
@@ -2258,15 +2271,15 @@ function rs_sekce_interni(): string {
             $oddil_s  = get_post_meta($r->ID,'rs_oddil',true);
             $segs_s   = (array)get_post_meta($r->ID,'rs_segmenty_ids',true);
             echo "<tr>";
-            echo "<td><strong>" . esc_html(get_post_meta($r->ID,'rs_nazev',true) ?: '–') . "</strong></td>";
-            echo "<td>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
+            echo "<td data-label='Název'><strong>" . esc_html(get_post_meta($r->ID,'rs_nazev',true) ?: '–') . "</strong></td>";
+            echo "<td data-label='Objekt'>" . esc_html(get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true)));
             if ($segs_s) echo " <em style='font-size:12px;color:#777'>(" . implode(', ', array_map('get_the_title',$segs_s)) . ")</em>";
             echo "</td>";
-            echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true)))) . "</td>";
-            echo "<td>" . esc_html($rez_us ? $rez_us->display_name : '–') . "</td>";
-            echo "<td>" . esc_html($oddil_s ?: '–') . "</td>";
-            echo "<td>" . rs_stav_badge($stav_v) . "</td>";
-            echo "<td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true)))) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($rez_us ? $rez_us->display_name : '–') . "</td>";
+            echo "<td data-label='Součást'>" . esc_html($oddil_s ?: '–') . "</td>";
+            echo "<td data-label='Stav'>" . rs_stav_badge($stav_v) . "</td>";
+            echo "<td data-label=''>";
             if ($stav_v !== 'zrusena' && ($uid_v === $cur_uid || $is_spravce)) {
                 echo "<form method='post' style='display:inline' onsubmit='return confirm(\"Zrušit tuto rezervaci?\")'>" . wp_nonce_field('rs_interni','_wpnonce',true,false);
                 echo "<input type='hidden' name='rs_int_action' value='zrusit'><input type='hidden' name='int_rez_id' value='{$r->ID}'>";
