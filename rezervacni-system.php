@@ -142,6 +142,13 @@ function rs_stav_badge(string $stav): string {
 }
 
 function rs_rez_jmeno(int $id): string {
+    if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
+        $nazev = get_post_meta($id, 'rs_nazev', true);
+        if ($nazev) return $nazev;
+        $uid = (int)(get_post_meta($id, 'rs_int_rezervujici_id', true) ?: get_post_meta($id, 'rs_wp_user_id', true));
+        if ($uid) { $user = get_userdata($uid); if ($user) return $user->display_name; }
+        return '–';
+    }
     if (get_post_meta($id, 'rs_rez_typ', true) === 'pravnicka')
         return get_post_meta($id, 'rs_nazev', true) ?: '–';
     return trim(get_post_meta($id, 'rs_jmeno', true) . ' ' . get_post_meta($id, 'rs_prijmeni', true)) ?: '–';
@@ -3772,8 +3779,8 @@ function rs_schvalit_handler() {
     $cena  = (float)get_post_meta($rid, 'rs_cena_celkem', true);
 
     // Přehled rezervací stejného objektu ±30 dní od termínu
-    $win_od   = date('Y-m-d H:i:s', strtotime($od) - 30 * 86400);
-    $win_do   = date('Y-m-d H:i:s', strtotime($do_) + 30 * 86400);
+    $win_od   = date('Y-m-d H:i:s', strtotime($od) - 7 * 86400);
+    $win_do   = date('Y-m-d H:i:s', strtotime($do_) + 7 * 86400);
     $all_rez  = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
         'meta_query' => [['key' => 'rs_prostor_id', 'value' => $pid]]]);
     $prehled_rez = [];
@@ -3808,7 +3815,7 @@ function rs_schvalit_handler() {
     echo "</div>";
 
     // Přehled obsazenosti objektu ±30 dní
-    echo "<div class='rs-card'><h4 class='rs-card-title'>Obsazenost objektu (±30 dní od termínu)</h4>";
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Obsazenost objektu (±7 dní od termínu)</h4>";
     if (empty($prehled_rez)) {
         echo "<p style='color:#888;font-style:italic;margin:0'>Žádné jiné rezervace v okolí termínu.</p>";
     } else {
