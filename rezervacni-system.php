@@ -4237,6 +4237,15 @@ function rs_sekce_prehled_kalendar(): string {
     var rsPrehKalData = <?php echo $kal_json; ?>;
     var rsPrehMesiceGen = <?php echo $mesice_gen_json; ?>;
     if (typeof escHtml === 'undefined') { function escHtml(s){ var d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; } }
+    if (typeof rsGrpToggle === 'undefined') {
+        function rsGrpToggle(gid){
+            var rows=document.querySelectorAll('tr.'+gid);
+            var ico=document.getElementById(gid+'-ico');
+            var open=rows.length>0&&rows[0].style.display!=='none';
+            rows.forEach(function(r){ r.style.display=open?'none':''; });
+            if(ico) ico.textContent=open?'▶':'▼';
+        }
+    }
     function rsPrehTab(pid) {
         document.querySelectorAll('[data-preh-panel]').forEach(function(el) { el.style.display = 'none'; });
         document.querySelectorAll('[data-preh-tab]').forEach(function(btn) {
@@ -4301,6 +4310,99 @@ function rs_sekce_prehled_kalendar(): string {
     });
     </script>
     <?php
+    // ─── Tabulka přehledu ─────────────────────────────────────────────────
+    $all_rez_preh = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,
+        'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'ASC',
+        'meta_query'=>[['key'=>'rs_stav','value'=>'zrusena','compare'=>'!=']]]);
+
+    if (!empty($all_rez_preh)) {
+        $preh_groups  = [];
+        $preh_singles = [];
+        foreach ($all_rez_preh as $r) {
+            $sk = get_post_meta($r->ID,'rs_skupina_id',true);
+            if ($sk) $preh_groups[$sk][] = $r;
+            else     $preh_singles[]     = $r;
+        }
+        $dny_cs_p = [1=>'Pondělí',2=>'Úterý',3=>'Středa',4=>'Čtvrtek',5=>'Pátek',6=>'Sobota',7=>'Neděle'];
+
+        echo "<hr style='margin:24px 0 16px;border:none;border-top:2px solid #1a5c2a'>";
+        echo "<h4 style='color:#1a5c2a;margin:0 0 12px'>Všechny rezervace</h4>";
+        echo "<div style='overflow-x:auto'><table class='rs-table rs-resp'>";
+        echo "<thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást střediska</th><th>Stav</th></tr></thead><tbody>";
+
+        $gp_idx = 0;
+        foreach ($preh_groups as $sk_id => $g_rez) {
+            $first   = $g_rez[0];
+            $last    = end($g_rez);
+            $nazev   = get_post_meta($first->ID,'rs_nazev',true) ?: '–';
+            $prostor = get_the_title((int)get_post_meta($first->ID,'rs_prostor_id',true));
+            $oddil   = get_post_meta($first->ID,'rs_oddil',true);
+            $uid     = (int)(get_post_meta($first->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($first->ID,'rs_wp_user_id',true));
+            $user_p  = get_userdata($uid);
+            $fod     = get_post_meta($first->ID,'rs_datum_od',true);
+            $fdo     = get_post_meta($first->ID,'rs_datum_do',true);
+            $lod     = get_post_meta($last->ID,'rs_datum_od',true);
+            $den_str = $dny_cs_p[(int)date('N',strtotime($fod))] ?? '';
+            $cas_od  = substr($fod,11,5);
+            $cas_do  = substr($fdo,11,5);
+            $ts_f    = strtotime($fod);
+            $ts_l    = strtotime($lod);
+            $termin  = $den_str . ' ' . $cas_od . '–' . $cas_do . "\nod " . ($ts_f ? date('j. n. Y',$ts_f) : '') . ' do ' . ($ts_l ? date('j. n. Y',$ts_l) : '');
+            $count   = count($g_rez);
+            $stavs   = array_map(fn($r) => get_post_meta($r->ID,'rs_stav',true), $g_rez);
+            $n_pot   = count(array_filter($stavs, fn($s) => $s === 'potvrzena'));
+            $n_cek   = count(array_filter($stavs, fn($s) => $s === 'cekajici'));
+            $n_zru   = count(array_filter($stavs, fn($s) => $s === 'zrusena'));
+            $gpid    = 'rspreh' . $gp_idx++;
+
+            echo "<tr style='background:#eef3ee;cursor:pointer' onclick='rsGrpToggle(\"" . esc_js($gpid) . "\")'>";
+            echo "<td data-label='Název'><span id='{$gpid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev) . "</strong> <span style='color:#777;font-size:12px'>({$count}×)</span></td>";
+            echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin)) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($user_p ? $user_p->display_name : '–') . "</td>";
+            echo "<td data-label='Součást střediska'>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td data-label='Stav' style='white-space:nowrap'>";
+            if ($n_pot) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#1a5c2a;color:#fff;margin-right:2px'>{$n_pot}✓</span>";
+            if ($n_cek) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#f59e0b;color:#fff;margin-right:2px'>{$n_cek}⏳</span>";
+            if ($n_zru) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#aaa;color:#fff'>{$n_zru}✕</span>";
+            echo "</td></tr>";
+
+            foreach ($g_rez as $r) {
+                $r_stav  = get_post_meta($r->ID,'rs_stav',true);
+                $r_od    = get_post_meta($r->ID,'rs_datum_od',true);
+                $r_do    = get_post_meta($r->ID,'rs_datum_do',true);
+                $opacity = $r_stav === 'zrusena' ? 'opacity:.5;' : '';
+                echo "<tr class='{$gpid} rs-child-row' style='display:none;background:#f8faf8;{$opacity}'>";
+                echo "<td style='font-size:13px;color:#666'>↳ " . esc_html(rs_format_datum($r_od)) . "</td>";
+                echo "<td></td>";
+                echo "<td style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html(rs_format_termin($r_od, $r_do))) . "</td>";
+                echo "<td></td><td></td>";
+                echo "<td>" . rs_stav_badge($r_stav) . "</td>";
+                echo "</tr>";
+            }
+        }
+
+        foreach ($preh_singles as $r) {
+            $nazev   = get_post_meta($r->ID,'rs_nazev',true) ?: '–';
+            $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
+            $stav    = get_post_meta($r->ID,'rs_stav',true);
+            $oddil   = get_post_meta($r->ID,'rs_oddil',true);
+            $uid     = (int)(get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($r->ID,'rs_wp_user_id',true));
+            $user_p  = get_userdata($uid);
+            $termin  = rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true));
+            echo "<tr>";
+            echo "<td data-label='Název'>" . esc_html($nazev) . "</td>";
+            echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
+            echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin)) . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($user_p ? $user_p->display_name : '–') . "</td>";
+            echo "<td data-label='Součást střediska'>" . esc_html($oddil ?: '–') . "</td>";
+            echo "<td data-label='Stav'>" . rs_stav_badge($stav) . "</td>";
+            echo "</tr>";
+        }
+
+        echo "</tbody></table></div>";
+    }
+
     echo "</div>"; // #rs-prehled
     return ob_get_clean();
 }
