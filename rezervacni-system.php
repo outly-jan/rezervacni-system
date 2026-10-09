@@ -236,17 +236,16 @@ function rs_spravci_emaily(): array {
     return array_unique(array_filter(array_map(fn($u) => $u->user_email, $users)));
 }
 
-function rs_notif_cc_adresy(): array {
-    $raw = get_option('rs_notif_cc_emaily', '');
+function rs_notif_parse_emaily(string $option): array {
+    $raw = get_option($option, '');
     if (!$raw) return [];
-    $adresy = array_filter(array_map('trim', preg_split('/[\n,]+/', $raw)));
-    return array_values(array_filter($adresy, 'is_email'));
+    return array_values(array_filter(array_map('trim', preg_split('/[\n,]+/', $raw)), 'is_email'));
 }
 
 function rs_mail(string $to, string $subj, string $body, string $reply_to = ''): void {
     $headers = ['Content-Type: text/plain; charset=UTF-8'];
     if ($reply_to) $headers[] = 'Reply-To: ' . $reply_to;
-    foreach (rs_notif_cc_adresy() as $cc) $headers[] = 'Bcc: ' . $cc;
+    foreach (rs_notif_parse_emaily('rs_notif_bcc_vse') as $bcc) $headers[] = 'Bcc: ' . $bcc;
     wp_mail($to, $subj, $body, $headers);
 }
 
@@ -415,7 +414,8 @@ function rs_notifikuj_nova(int $id) {
         get_option('rs_stredisko_kontakt_email', ''));
 
     $prehled = rs_rez_prehled($prostor_id, $od_raw, $do_raw, $id);
-    foreach (rs_spravci_emaily() as $se)
+    $admin_emaily = array_unique(array_merge(rs_spravci_emaily(), rs_notif_parse_emaily('rs_notif_cc_emaily')));
+    foreach ($admin_emaily as $se)
         rs_mail($se, "Nová žádost o rezervaci – {$label}",
             "Nová žádost o rezervaci.\n\nObjekt: {$label}\nTermín: {$od} – {$do_}\n\n"
             . ($prehled ? $prehled . "\n\n" : '')
@@ -1457,9 +1457,11 @@ function rs_sekce_nastaveni(): string {
         update_option('rs_stredisko_kontakt_jmeno', sanitize_text_field($_POST['stredisko_kontakt_jmeno'] ?? ''));
         update_option('rs_stredisko_kontakt_mobil', sanitize_text_field($_POST['stredisko_kontakt_mobil'] ?? ''));
         update_option('rs_stredisko_kontakt_email', sanitize_email($_POST['stredisko_kontakt_email'] ?? ''));
-        $cc_raw   = sanitize_textarea_field($_POST['notif_cc_emaily'] ?? '');
-        $cc_lines = array_filter(array_map('trim', preg_split('/[\n,]+/', $cc_raw)));
-        update_option('rs_notif_cc_emaily', implode("\n", array_filter($cc_lines, 'is_email')));
+        foreach (['notif_cc_emaily' => 'rs_notif_cc_emaily', 'notif_bcc_vse' => 'rs_notif_bcc_vse'] as $post_key => $opt_key) {
+            $raw   = sanitize_textarea_field($_POST[$post_key] ?? '');
+            $lines = array_filter(array_map('trim', preg_split('/[\n,]+/', $raw)));
+            update_option($opt_key, implode("\n", array_filter($lines, 'is_email')));
+        }
         // Vzdušné kategorie
         $kategorie = [];
         $kat_od  = (array)($_POST['kat_od']  ?? []);
@@ -1485,6 +1487,7 @@ function rs_sekce_nastaveni(): string {
     $kont_mobil  = get_option('rs_stredisko_kontakt_mobil', '');
     $kont_email  = get_option('rs_stredisko_kontakt_email', '');
     $cc_emaily   = get_option('rs_notif_cc_emaily', '');
+    $bcc_vse     = get_option('rs_notif_bcc_vse', '');
 
     ob_start();
     echo "<h3 class='rs-section-title'>Nastavení</h3>{$zprava}";
@@ -1508,9 +1511,14 @@ function rs_sekce_nastaveni(): string {
 
     // Další příjemci notifikací
     echo "<div class='rs-card'><h4 class='rs-card-title'>Další příjemci notifikací</h4>";
-    echo "<p style='font-size:13px;color:#555;margin-bottom:12px'>Zadejte e-mailové adresy (každou na nový řádek), na které budou chodit skryté kopie (BCC) všech notifikačních e-mailů zasílaných systémem – žadatelům i správcům.</p>";
-    echo "<div class='rs-form-group'><label>E-mailové adresy <span style='font-weight:normal;font-size:12px;color:#666'>(jeden e-mail na řádek)</span></label>";
-    echo "<textarea name='notif_cc_emaily' rows='4' style='max-width:100%;font-family:monospace;font-size:13px' placeholder='dalsi@skautchlumec.cz\nvedouci@skautchlumec.cz'>" . esc_textarea($cc_emaily) . "</textarea></div>";
+    echo "<p style='font-size:13px;color:#555;margin-bottom:16px'>Adresy v prvním poli dostávají jen e-maily o nových žádostech (stejný obsah jako správci). Adresy v druhém poli dostávají BCC <em>všech</em> notifikací – i těch zasílaných žadatelům.</p>";
+    echo "<div style='display:flex;flex-wrap:wrap;gap:8px 20px'>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:220px'><label>Správcovské notifikace <span style='font-weight:normal;font-size:12px;color:#666'>(nová žádost)</span></label>";
+    echo "<textarea name='notif_cc_emaily' rows='3' style='width:100%;font-family:monospace;font-size:13px' placeholder='vedouci@skautchlumec.cz'>" . esc_textarea($cc_emaily) . "</textarea></div>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:220px'><label>BCC všech notifikací <span style='font-weight:normal;font-size:12px;color:#666'>(žadatel i správce)</span></label>";
+    echo "<textarea name='notif_bcc_vse' rows='3' style='width:100%;font-family:monospace;font-size:13px' placeholder='ajtak@skautchlumec.cz'>" . esc_textarea($bcc_vse) . "</textarea></div>";
+    echo "</div>";
+    echo "<p style='font-size:12px;color:#888;margin-top:4px'>Každou adresu zadejte na nový řádek. Neplatné adresy budou automaticky odstraněny.</p>";
     echo "</div>";
 
     // Vzdušné
