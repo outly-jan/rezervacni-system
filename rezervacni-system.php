@@ -39,6 +39,22 @@ function rs_aktivace() {
 
 register_deactivation_hook(__FILE__, function() { wp_clear_scheduled_hook('rs_cron_ucastnici'); });
 
+add_action('admin_init', 'rs_migrace_rolí');
+function rs_migrace_rolí() {
+    if (get_option('rs_role_migrace_v1')) return;
+    $stara = 'admin_rezervanho_systmu';
+    if (get_role($stara)) {
+        foreach (get_users(['role' => $stara]) as $u) {
+            $u->remove_role($stara);
+            $u->add_role('admin_rezervacniho_systemu');
+        }
+        remove_role($stara);
+    }
+    if (!get_role('admin_rezervacniho_systemu'))
+        add_role('admin_rezervacniho_systemu', 'Admin rezervačního systému', ['read' => true, 'rs_admin' => true, 'rs_spravce' => true, 'rs_vedeni' => true]);
+    update_option('rs_role_migrace_v1', '1');
+}
+
 function rs_ma_pravo(string $cap): bool {
     $u = wp_get_current_user();
     if ($cap === 'admin')   return $u->has_cap('rs_admin');
