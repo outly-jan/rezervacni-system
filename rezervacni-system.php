@@ -236,9 +236,17 @@ function rs_spravci_emaily(): array {
     return array_unique(array_filter(array_map(fn($u) => $u->user_email, $users)));
 }
 
+function rs_notif_cc_adresy(): array {
+    $raw = get_option('rs_notif_cc_emaily', '');
+    if (!$raw) return [];
+    $adresy = array_filter(array_map('trim', preg_split('/[\n,]+/', $raw)));
+    return array_values(array_filter($adresy, 'is_email'));
+}
+
 function rs_mail(string $to, string $subj, string $body, string $reply_to = ''): void {
     $headers = ['Content-Type: text/plain; charset=UTF-8'];
     if ($reply_to) $headers[] = 'Reply-To: ' . $reply_to;
+    foreach (rs_notif_cc_adresy() as $cc) $headers[] = 'Bcc: ' . $cc;
     wp_mail($to, $subj, $body, $headers);
 }
 
@@ -1449,6 +1457,9 @@ function rs_sekce_nastaveni(): string {
         update_option('rs_stredisko_kontakt_jmeno', sanitize_text_field($_POST['stredisko_kontakt_jmeno'] ?? ''));
         update_option('rs_stredisko_kontakt_mobil', sanitize_text_field($_POST['stredisko_kontakt_mobil'] ?? ''));
         update_option('rs_stredisko_kontakt_email', sanitize_email($_POST['stredisko_kontakt_email'] ?? ''));
+        $cc_raw   = sanitize_textarea_field($_POST['notif_cc_emaily'] ?? '');
+        $cc_lines = array_filter(array_map('trim', preg_split('/[\n,]+/', $cc_raw)));
+        update_option('rs_notif_cc_emaily', implode("\n", array_filter($cc_lines, 'is_email')));
         // Vzdušné kategorie
         $kategorie = [];
         $kat_od  = (array)($_POST['kat_od']  ?? []);
@@ -1473,6 +1484,7 @@ function rs_sekce_nastaveni(): string {
     $kont_jmeno  = get_option('rs_stredisko_kontakt_jmeno', '');
     $kont_mobil  = get_option('rs_stredisko_kontakt_mobil', '');
     $kont_email  = get_option('rs_stredisko_kontakt_email', '');
+    $cc_emaily   = get_option('rs_notif_cc_emaily', '');
 
     ob_start();
     echo "<h3 class='rs-section-title'>Nastavení</h3>{$zprava}";
@@ -1493,6 +1505,13 @@ function rs_sekce_nastaveni(): string {
     echo "<div class='rs-form-group' style='flex:1;min-width:160px'><label>Mobil</label><input type='tel' name='stredisko_kontakt_mobil' value='" . esc_attr($kont_mobil) . "' placeholder='+420 731 123 456'></div>";
     echo "<div class='rs-form-group' style='flex:1;min-width:200px'><label>E-mail</label><input type='email' name='stredisko_kontakt_email' value='" . esc_attr($kont_email) . "' placeholder='kontakt@skautchlumec.cz'></div>";
     echo "</div></div>";
+
+    // Další příjemci notifikací
+    echo "<div class='rs-card'><h4 class='rs-card-title'>Další příjemci notifikací</h4>";
+    echo "<p style='font-size:13px;color:#555;margin-bottom:12px'>Zadejte e-mailové adresy (každou na nový řádek), na které budou chodit skryté kopie (BCC) všech notifikačních e-mailů zasílaných systémem – žadatelům i správcům.</p>";
+    echo "<div class='rs-form-group'><label>E-mailové adresy <span style='font-weight:normal;font-size:12px;color:#666'>(jeden e-mail na řádek)</span></label>";
+    echo "<textarea name='notif_cc_emaily' rows='4' style='max-width:100%;font-family:monospace;font-size:13px' placeholder='dalsi@skautchlumec.cz\nvedouci@skautchlumec.cz'>" . esc_textarea($cc_emaily) . "</textarea></div>";
+    echo "</div>";
 
     // Vzdušné
     echo "<div class='rs-card'><h4 class='rs-card-title'>Ubytovací poplatek – vzdušné</h4>";
