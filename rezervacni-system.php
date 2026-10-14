@@ -2067,8 +2067,8 @@ function rs_rez_detail_admin(int $id): string {
     }
     $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true);
     $a_tel_m = get_post_meta($id,'rs_mobil',true);
-    $tel_display = $a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '';
-    echo "<div class='rs-form-group' style='flex:1;min-width:160px'><label>Mobil</label><input type='tel' name='rez_mobil' value='" . esc_attr($tel_display) . "'></div>";
+    $tel_label = $a_tel_p ? "Mobil <span style='font-weight:normal;font-size:12px;color:#666'>(předvolba +{$a_tel_p} zůstane)</span>" : "Mobil";
+    echo "<div class='rs-form-group' style='flex:1;min-width:160px'><label>{$tel_label}</label><input type='tel' name='rez_mobil' value='" . esc_attr($a_tel_m) . "'></div>";
     echo "<div class='rs-form-group' style='flex:1;min-width:220px'><label>E-mail</label><input type='email' name='rez_email' value='" . esc_attr(get_post_meta($id,'rs_email',true)) . "'></div>";
     echo "</div>";
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary rs-btn-sm'>💾 Uložit kontakt</button></div>";
