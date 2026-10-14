@@ -2866,9 +2866,10 @@ function rs_kalendar_sc(array $atts): string {
             $target_ids = [$pid];
         }
 
+        $multiday = $r_od_ts && $r_do_ts && date('Y-m-d', $r_od_ts) !== date('Y-m-d', $r_do_ts);
         $detail = [
-            'od'   => $r_od_ts ? date('H:i', $r_od_ts) : '',
-            'do'   => $r_do_ts ? date('H:i', $r_do_ts) : '',
+            'od'   => $r_od_ts ? ($multiday ? rs_format_datum(date('Y-m-d H:i:s', $r_od_ts)) : date('H:i', $r_od_ts)) : '',
+            'do'   => $r_do_ts ? ($multiday ? rs_format_datum(date('Y-m-d H:i:s', $r_do_ts)) : date('H:i', $r_do_ts)) : '',
             'typ'  => $typ,
             'stav' => $r_stav,
         ];
@@ -4273,9 +4274,10 @@ function rs_sekce_prehled_kalendar(): string {
         $rez_uid  = (int)get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: (int)get_post_meta($r->ID,'rs_wp_user_id',true);
         $rez_user = get_userdata($rez_uid);
         $skupina  = get_post_meta($r->ID,'rs_skupina_id',true);
+        $multiday = $r_od_ts && $r_do_ts && date('Y-m-d', $r_od_ts) !== date('Y-m-d', $r_do_ts);
         $detail = [
-            'od'          => $r_od_ts ? date('H:i', $r_od_ts) : '',
-            'do'          => $r_do_ts ? date('H:i', $r_do_ts) : '',
+            'od'          => $r_od_ts ? ($multiday ? rs_format_datum(date('Y-m-d H:i:s', $r_od_ts)) : date('H:i', $r_od_ts)) : '',
+            'do'          => $r_do_ts ? ($multiday ? rs_format_datum(date('Y-m-d H:i:s', $r_do_ts)) : date('H:i', $r_do_ts)) : '',
             'typ'         => $typ,
             'stav'        => $r_stav,
             'nazev'       => get_post_meta($r->ID,'rs_nazev',true),
