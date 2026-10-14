@@ -502,6 +502,29 @@ function rs_notifikuj_interni_cekajici(int $id) {
         get_option('rs_stredisko_kontakt_email', ''));
 }
 
+function rs_notifikuj_znovu_zakaznikovi(int $id) {
+    $email = rs_rez_get_email($id);
+    if (!$email) return;
+    $prostor_id = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $seg_ids    = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label      = rs_prostor_label($prostor_id, $seg_ids);
+    $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    $stav       = get_post_meta($id, 'rs_stav', true);
+    $reply_to   = get_option('rs_stredisko_kontakt_email', '');
+    if ($stav === 'potvrzena') {
+        rs_notifikuj_potvrzeni($id);
+    } elseif ($stav === 'zrusena') {
+        rs_notifikuj_zruseni($id);
+    } else {
+        $token = get_post_meta($id, 'rs_token', true);
+        $url   = rs_sprava_url($token);
+        rs_mail($email, "Žádost o rezervaci přijata – {$label}",
+            "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci objektu {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . rs_podpis(),
+            $reply_to);
+    }
+}
+
 // Cron: upozornění na nevyplněné účastníky (7 dní a 1 den před začátkem)
 add_action('rs_cron_ucastnici', 'rs_cron_upozorneni_ucastnici');
 function rs_cron_upozorneni_ucastnici() {
@@ -1721,6 +1744,20 @@ function rs_sekce_rezervace(): string {
             update_post_meta($rid,'rs_cena_individualni',$ind);
             update_post_meta($rid,'rs_cena_celkem',$ind);
             $zprava = rs_alert('Individuální cena uložena.');
+        } elseif ($action === 'ulozit_kontakt' && $rid) {
+            update_post_meta($rid, 'rs_email', sanitize_email($_POST['rez_email'] ?? ''));
+            $tel_m = preg_replace('/\s+/', '', sanitize_text_field($_POST['rez_mobil'] ?? ''));
+            update_post_meta($rid, 'rs_mobil', $tel_m);
+            if (get_post_meta($rid, 'rs_rez_typ', true) === 'pravnicka') {
+                update_post_meta($rid, 'rs_kontakt_jmeno', sanitize_text_field($_POST['rez_kontakt_jmeno'] ?? ''));
+            } else {
+                update_post_meta($rid, 'rs_jmeno',    sanitize_text_field($_POST['rez_jmeno'] ?? ''));
+                update_post_meta($rid, 'rs_prijmeni', sanitize_text_field($_POST['rez_prijmeni'] ?? ''));
+            }
+            $zprava = rs_alert('Kontaktní údaje uloženy.');
+        } elseif ($action === 'znovu_odeslat_mail' && $rid) {
+            rs_notifikuj_znovu_zakaznikovi($rid);
+            $zprava = rs_alert('E-mail žadateli odeslán.');
         } elseif ($action === 'odeslat_ucastnici' && $rid) {
             $ucastnici = rs_uloz_ucastniky($rid);
             if ($ucastnici !== false) {
@@ -2015,6 +2052,33 @@ function rs_rez_detail_admin(int $id): string {
     echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
     if ($token) echo "<tr><th>Token</th><td><code>" . esc_html($token) . "</code></td></tr>";
     echo "</table>";
+
+    // Úprava kontaktních údajů
+    $rez_typ = get_post_meta($id,'rs_rez_typ',true);
+    echo "<details style='margin-top:16px'><summary style='cursor:pointer;font-weight:600;font-size:14px;color:#1a5c2a;padding:8px 0'>✏️ Upravit kontaktní údaje žadatele</summary>";
+    echo "<form method='post' style='margin-top:10px'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_rez_action' value='ulozit_kontakt'><input type='hidden' name='rez_id' value='{$id}'>";
+    echo "<div style='display:flex;flex-wrap:wrap;gap:8px 16px;max-width:600px'>";
+    if ($rez_typ === 'pravnicka') {
+        echo "<div class='rs-form-group' style='flex:1;min-width:200px'><label>Kontaktní osoba</label><input type='text' name='rez_kontakt_jmeno' value='" . esc_attr(get_post_meta($id,'rs_kontakt_jmeno',true)) . "'></div>";
+    } else {
+        echo "<div class='rs-form-group' style='flex:1;min-width:140px'><label>Jméno</label><input type='text' name='rez_jmeno' value='" . esc_attr(get_post_meta($id,'rs_jmeno',true)) . "'></div>";
+        echo "<div class='rs-form-group' style='flex:1;min-width:140px'><label>Příjmení</label><input type='text' name='rez_prijmeni' value='" . esc_attr(get_post_meta($id,'rs_prijmeni',true)) . "'></div>";
+    }
+    $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true);
+    $a_tel_m = get_post_meta($id,'rs_mobil',true);
+    $tel_display = $a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '';
+    echo "<div class='rs-form-group' style='flex:1;min-width:160px'><label>Mobil</label><input type='tel' name='rez_mobil' value='" . esc_attr($tel_display) . "'></div>";
+    echo "<div class='rs-form-group' style='flex:1;min-width:220px'><label>E-mail</label><input type='email' name='rez_email' value='" . esc_attr(get_post_meta($id,'rs_email',true)) . "'></div>";
+    echo "</div>";
+    echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary rs-btn-sm'>💾 Uložit kontakt</button></div>";
+    echo "</form></details>";
+
+    // Znovu odeslat e-mail žadateli
+    echo "<form method='post' style='margin-top:10px;display:inline-block'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_rez_action' value='znovu_odeslat_mail'><input type='hidden' name='rez_id' value='{$id}'>";
+    $stav_label = ['cekajici'=>'(žádost přijata)','potvrzena'=>'(potvrzení)','zrusena'=>'(zrušení)'];
+    echo "<button type='submit' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='return confirm(\"Odeslat e-mail žadateli?\")'>📧 Znovu odeslat e-mail žadateli " . ($stav_label[$stav] ?? '') . "</button></form>";
 
     // Individuální cena
     if ($stav !== 'zrusena') {
