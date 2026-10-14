@@ -267,13 +267,20 @@ function rs_mail(string $to, string $subj, string $body, string $reply_to = ''):
     wp_mail($to, $subj, $body, $headers);
 }
 
+function rs_mail_html(string $to, string $subj, string $html, string $reply_to = ''): void {
+    $headers = ['Content-Type: text/html; charset=UTF-8'];
+    if ($reply_to) $headers[] = 'Reply-To: ' . $reply_to;
+    foreach (rs_notif_parse_emaily('rs_notif_bcc_vse') as $bcc) $headers[] = 'Bcc: ' . $bcc;
+    wp_mail($to, $subj, $html, $headers);
+}
+
 function rs_rez_udaje(int $id): string {
     $typ      = get_post_meta($id, 'rs_rez_typ', true);
     $pocet    = (int)get_post_meta($id, 'rs_pocet_lidi', true);
     $poznamka = get_post_meta($id, 'rs_poznamka', true);
     $tel_predv = get_post_meta($id, 'rs_tel_predvolba', true);
     $tel_mobil = get_post_meta($id, 'rs_mobil', true);
-    $tel_fmt   = $tel_mobil ? ($tel_predv ? "+$tel_predv $tel_mobil" : $tel_mobil) : '';
+    $tel_fmt   = $tel_mobil ? ($tel_predv && $tel_mobil[0] !== '+' ? "+$tel_predv $tel_mobil" : $tel_mobil) : '';
     $ulice_v   = get_post_meta($id, 'rs_ulice', true);
     $adresa    = $ulice_v
         ? trim($ulice_v . ' ' . get_post_meta($id,'rs_cp',true) . ', ' . get_post_meta($id,'rs_psc',true) . ' ' . get_post_meta($id,'rs_obec',true))
@@ -357,16 +364,14 @@ function rs_admin_url(): string {
     return $row ? (string)get_permalink((int)$row->ID) : home_url('/');
 }
 
-function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $nova_id = 0): string {
-    $ts_od     = strtotime($od_raw);
-    $ts_do     = strtotime($do_raw);
-    $win_od    = date('Y-m-d H:i:s', $ts_od - 3 * 86400);
-    $win_do    = date('Y-m-d H:i:s', $ts_do + 3 * 86400);
-    $stav_map  = ['cekajici' => 'čeká na schválení', 'potvrzena' => 'potvrzena', 'zrusena' => 'zrušena'];
-
+function rs_rez_prehled_pole(int $prostor_id, string $od_raw, string $do_raw, int $nova_id = 0): array {
+    $ts_od    = strtotime($od_raw);
+    $ts_do    = strtotime($do_raw);
+    $win_od   = date('Y-m-d H:i:s', $ts_od - 3 * 86400);
+    $win_do   = date('Y-m-d H:i:s', $ts_do + 3 * 86400);
+    $stav_map = ['cekajici' => 'čeká na schválení', 'potvrzena' => 'potvrzena', 'zrusena' => 'zrušena'];
     $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids',
         'meta_query' => [['key' => 'rs_prostor_id', 'value' => $prostor_id]]]);
-
     $rows = [];
     foreach ($all as $rid) {
         $r_od = get_post_meta($rid, 'rs_datum_od', true);
@@ -374,18 +379,27 @@ function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $no
         if (strtotime($r_do) <= strtotime($win_od) || strtotime($r_od) >= strtotime($win_do)) continue;
         $rows[$rid] = strtotime($r_od);
     }
-    if (empty($rows)) return '';
-
     asort($rows);
-    $lines = ['Obsazenost objektu v okolí termínu (±3 dny):'];
+    $result = [];
     foreach (array_keys($rows) as $rid) {
-        $r_od  = get_post_meta($rid, 'rs_datum_od', true);
-        $r_do  = get_post_meta($rid, 'rs_datum_do', true);
-        $stav  = $stav_map[get_post_meta($rid, 'rs_stav', true)] ?? '?';
-        $jmeno = rs_rez_jmeno($rid);
-        $mark  = ($rid === $nova_id) ? ' <<< TATO ŽÁDOST' : '';
-        $lines[] = '  ' . rs_format_datum($r_od) . ' – ' . rs_format_datum($r_do)
-                 . '  ' . $jmeno . '  [' . $stav . ']' . $mark;
+        $result[] = [
+            'od'    => rs_format_datum(get_post_meta($rid, 'rs_datum_od', true)),
+            'do'    => rs_format_datum(get_post_meta($rid, 'rs_datum_do', true)),
+            'jmeno' => rs_rez_jmeno($rid),
+            'stav'  => $stav_map[get_post_meta($rid, 'rs_stav', true)] ?? '?',
+            'nova'  => $rid === $nova_id,
+        ];
+    }
+    return $result;
+}
+
+function rs_rez_prehled(int $prostor_id, string $od_raw, string $do_raw, int $nova_id = 0): string {
+    $pole = rs_rez_prehled_pole($prostor_id, $od_raw, $do_raw, $nova_id);
+    if (empty($pole)) return '';
+    $lines = ['Obsazenost objektu v okolí termínu (±3 dny):'];
+    foreach ($pole as $row) {
+        $mark    = $row['nova'] ? ' <<< TATO ŽÁDOST' : '';
+        $lines[] = '  ' . $row['od'] . ' – ' . $row['do'] . '  ' . $row['jmeno'] . '  [' . $row['stav'] . ']' . $mark;
     }
     return implode("\n", $lines);
 }
@@ -406,6 +420,102 @@ function rs_rez_get_email(int $id): string {
     if (!$uid) return '';
     $user = get_userdata($uid);
     return $user ? $user->user_email : '';
+}
+
+function rs_notif_nova_html(int $id, string $label, string $od, string $do_, array $prehled, string $schvalit_url, string $admin_url): string {
+    $typ   = get_post_meta($id, 'rs_rez_typ', true);
+    $pocet = (int)get_post_meta($id, 'rs_pocet_lidi', true);
+    $pozn  = get_post_meta($id, 'rs_poznamka', true);
+    $tel_p = get_post_meta($id, 'rs_tel_predvolba', true);
+    $tel_m = get_post_meta($id, 'rs_mobil', true);
+    $tel   = $tel_m ? ($tel_p && $tel_m[0] !== '+' ? "+$tel_p $tel_m" : $tel_m) : '';
+
+    if ($typ === 'pravnicka') {
+        $kdo_rows = [
+            ['Organizace', get_post_meta($id, 'rs_nazev', true)],
+            ['IČO', get_post_meta($id, 'rs_ico', true)],
+            ['Sídlo', get_post_meta($id, 'rs_sidlo', true)],
+            ['Kontakt', get_post_meta($id, 'rs_kontakt_jmeno', true)],
+            ['Mobil', $tel],
+            ['E-mail', get_post_meta($id, 'rs_email', true)],
+            ['Počet osob', $pocet ?: ''],
+        ];
+    } else {
+        $nar    = get_post_meta($id, 'rs_datum_narozeni', true);
+        $ulice  = get_post_meta($id, 'rs_ulice', true);
+        $adresa = $ulice
+            ? trim($ulice . ' ' . get_post_meta($id,'rs_cp',true) . ', ' . get_post_meta($id,'rs_psc',true) . ' ' . get_post_meta($id,'rs_obec',true))
+            : get_post_meta($id, 'rs_bydliste', true);
+        $kdo_rows = [
+            ['Jméno', trim(get_post_meta($id,'rs_jmeno',true) . ' ' . get_post_meta($id,'rs_prijmeni',true))],
+            ['Datum nar.', $nar ? rs_format_datum($nar . ' 00:00:00') : ''],
+            ['Bydliště', $adresa],
+            ['Mobil', $tel],
+            ['E-mail', get_post_meta($id, 'rs_email', true)],
+            ['Počet osob', $pocet ?: ''],
+        ];
+    }
+    if ($pozn) $kdo_rows[] = ['Poznámka', $pozn];
+
+    $h  = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>';
+    $h .= '<body style="margin:0;padding:0;background:#f0f4f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">';
+    $h .= '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f0;padding:20px 0"><tr><td align="center">';
+    $h .= '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #dde8dd">';
+
+    // Header
+    $h .= '<tr><td style="background:#1a5c2a;padding:18px 24px">';
+    $h .= '<p style="margin:0;font-size:17px;font-weight:bold;color:#ffffff">Nová žádost o rezervaci</p>';
+    $h .= '<p style="margin:5px 0 0;font-size:14px;color:#a8d5b5">' . esc_html($label) . '</p>';
+    $h .= '</td></tr>';
+
+    // Termín
+    $h .= '<tr><td style="padding:18px 24px 0">';
+    $h .= '<p style="margin:0 0 3px;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Termín</p>';
+    $h .= '<p style="margin:0;font-size:16px;font-weight:700;color:#1a5c2a">' . esc_html($od) . ' &ndash; ' . esc_html($do_) . '</p>';
+    $h .= '</td></tr>';
+
+    // Žadatel
+    $h .= '<tr><td style="padding:14px 24px 0">';
+    $h .= '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f7f1;border-left:4px solid #1a5c2a;border-radius:0 4px 4px 0">';
+    $h .= '<tr><td colspan="2" style="padding:10px 14px 6px;font-size:11px;font-weight:700;color:#1a5c2a;text-transform:uppercase;letter-spacing:.5px">Žadatel</td></tr>';
+    foreach ($kdo_rows as [$k, $v]) {
+        if ((string)$v === '') continue;
+        $h .= '<tr>';
+        $h .= '<td style="padding:3px 14px;font-size:13px;color:#666;width:120px;vertical-align:top;white-space:nowrap">' . esc_html($k) . '</td>';
+        $h .= '<td style="padding:3px 14px 3px 0;font-size:13px;font-weight:600;color:#1a1a1a">' . esc_html((string)$v) . '</td>';
+        $h .= '</tr>';
+    }
+    $h .= '<tr><td colspan="2" style="padding:8px"></td></tr>';
+    $h .= '</table></td></tr>';
+
+    // Obsazenost
+    if (!empty($prehled)) {
+        $h .= '<tr><td style="padding:14px 24px 0">';
+        $h .= '<p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Obsazenost objektu v okolí termínu (&plusmn;3 dny)</p>';
+        $h .= '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:4px;overflow:hidden;border:1px solid #e0e8e0">';
+        foreach ($prehled as $i => $row) {
+            $bg     = $row['nova'] ? '#fffbe6' : ($i % 2 === 0 ? '#f9fdf9' : '#ffffff');
+            $border = $row['nova'] ? '2px solid #e6a817' : '1px solid #e8f0e8';
+            $sc     = $row['stav'] === 'potvrzena' ? '#1a5c2a' : ($row['stav'] === 'zrušena' ? '#b83232' : '#c07700');
+            $jmeno  = esc_html($row['jmeno']);
+            if ($row['nova']) $jmeno .= ' <span style="color:#c07700;font-size:11px;font-weight:700">&larr; TATO ŽÁDOST</span>';
+            $h .= '<tr style="background:' . $bg . ';border-bottom:' . $border . '">';
+            $h .= '<td style="padding:6px 10px;font-size:13px;white-space:nowrap">' . esc_html($row['od']) . ' &ndash; ' . esc_html($row['do']) . '</td>';
+            $h .= '<td style="padding:6px 10px;font-size:13px;font-weight:600">' . $jmeno . '</td>';
+            $h .= '<td style="padding:6px 10px;font-size:12px;color:' . $sc . ';font-weight:600;white-space:nowrap;text-align:right">' . esc_html($row['stav']) . '</td>';
+            $h .= '</tr>';
+        }
+        $h .= '</table></td></tr>';
+    }
+
+    // Tlačítka
+    $h .= '<tr><td style="padding:18px 24px 24px">';
+    $h .= '<a href="' . esc_url($schvalit_url) . '" style="display:inline-block;background:#1a5c2a;color:#ffffff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:14px;margin-right:10px;margin-bottom:8px">Schválit nebo zamítnout</a>';
+    $h .= '<a href="' . esc_url($admin_url) . '" style="display:inline-block;background:#ffffff;color:#1a5c2a;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #1a5c2a;margin-bottom:8px">Administrace</a>';
+    $h .= '</td></tr>';
+
+    $h .= '</table></td></tr></table></body></html>';
+    return $h;
 }
 
 function rs_notifikuj_nova(int $id) {
@@ -431,16 +541,11 @@ function rs_notifikuj_nova(int $id) {
         "Dobrý den,\n\npřijali jsme vaši žádost o rezervaci objektu {$label} na termín {$od} – {$do_}. Rezervace čeká na schválení – jakmile ji potvrdíme, přijde vám e-mail s potvrzením.\n\nOdkaz pro správu vaší rezervace (uschovejte si jej):\n{$url}\n\n" . rs_podpis(),
         get_option('rs_stredisko_kontakt_email', ''));
 
-    $prehled = rs_rez_prehled($prostor_id, $od_raw, $do_raw, $id);
+    $prehled = rs_rez_prehled_pole($prostor_id, $od_raw, $do_raw, $id);
     $admin_emaily = array_unique(array_merge(rs_spravci_emaily(), rs_notif_parse_emaily('rs_notif_cc_emaily')));
+    $html = rs_notif_nova_html($id, $label, $od, $do_, $prehled, $schvalit_url, rs_admin_url());
     foreach ($admin_emaily as $se)
-        rs_mail($se, "Nová žádost o rezervaci – {$label}",
-            "Nová žádost o rezervaci.\n\nObjekt: {$label}\nTermín: {$od} – {$do_}\n\n"
-            . ($prehled ? $prehled . "\n\n" : '')
-            . "--- Žadatel ---\n" . rs_rez_udaje($id)
-            . "\n\nSchválit nebo zamítnout (bez přihlášení):\n{$schvalit_url}"
-            . "\n\nAdministrace: " . rs_admin_url(),
-            $email);
+        rs_mail_html($se, "Nová žádost o rezervaci – {$label}", $html, $email);
 }
 
 function rs_notifikuj_potvrzeni(int $id) {
@@ -2037,7 +2142,7 @@ function rs_rez_detail_admin(int $id): string {
         echo "<tr><th>Sídlo</th><td>" . esc_html(get_post_meta($id,'rs_sidlo',true)) . "</td></tr>";
         echo "<tr><th>Kontakt</th><td>" . esc_html(get_post_meta($id,'rs_kontakt_jmeno',true)) . "</td></tr>";
         $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true); $a_tel_m = get_post_meta($id,'rs_mobil',true);
-        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
+        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p && $a_tel_m[0] !== '+' ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
         echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
     } else {
         echo "<tr><th>Jméno</th><td>" . esc_html(get_post_meta($id,'rs_jmeno',true)) . " " . esc_html(get_post_meta($id,'rs_prijmeni',true)) . "</td></tr>";
@@ -2046,7 +2151,7 @@ function rs_rez_detail_admin(int $id): string {
         $a_adr   = $a_ulice ? trim($a_ulice.' '.get_post_meta($id,'rs_cp',true).', '.get_post_meta($id,'rs_psc',true).' '.get_post_meta($id,'rs_obec',true)) : get_post_meta($id,'rs_bydliste',true);
         $a_tel_p = get_post_meta($id,'rs_tel_predvolba',true); $a_tel_m = get_post_meta($id,'rs_mobil',true);
         echo "<tr><th>Bydliště</th><td>" . esc_html($a_adr) . "</td></tr>";
-        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
+        echo "<tr><th>Mobil</th><td>" . esc_html($a_tel_m ? ($a_tel_p && $a_tel_m[0] !== '+' ? "+$a_tel_p $a_tel_m" : $a_tel_m) : '') . "</td></tr>";
         echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
     }
     echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
