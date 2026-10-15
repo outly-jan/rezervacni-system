@@ -3466,7 +3466,7 @@ function rs_formular_sc(): string {
     }
 
     $old         = (!$hotovo && $zprava) ? $_POST : [];
-    $old_typ     = $old['rez_typ']          ?? 'fyzicka';
+    $old_typ     = $old['rez_typ']          ?? 'pravnicka';
     $old_prostor = (int)($old['ext_prostor_id'] ?? 0);
     $old_segs    = array_map('intval', (array)($old['ext_segmenty'] ?? []));
     $old_cd      = !empty($old['ext_cely_den']);
@@ -3498,10 +3498,21 @@ function rs_formular_sc(): string {
 
     // Typ rezervujícího
     echo "<div class='rs-card'><h4 class='rs-card-title'>Kdo rezervuje?</h4>";
-    echo "<div class='rs-form-group'>";
-    echo "<label style='font-weight:normal;margin-right:16px'><input type='radio' name='rez_typ' value='fyzicka'" . ($old_typ !== 'pravnicka' ? ' checked' : '') . " onchange='rsRezTypChange(this.value)'> Fyzická osoba</label>";
-    echo "<label style='font-weight:normal'><input type='radio' name='rez_typ' value='pravnicka'" . ($old_typ === 'pravnicka' ? ' checked' : '') . " onchange='rsRezTypChange(this.value)'> Právnická osoba</label>";
-    echo "</div>";
+    echo "<div class='rs-form-group' style='margin-bottom:0'>";
+    echo "<div style='display:flex;gap:12px;margin-top:4px'>";
+    $fyz = $old_typ !== 'pravnicka';
+    $prv = $old_typ === 'pravnicka';
+    echo "<label id='rs-typ-card-fyzicka' style='flex:1;cursor:pointer;display:block;border:2px solid " . ($fyz ? '#1a5c2a' : '#ccc') . ";border-radius:8px;padding:14px 16px;background:" . ($fyz ? '#f0f7f1' : '#fff') . ";transition:border-color .15s,background .15s'>";
+    echo "<input type='radio' name='rez_typ' value='fyzicka'" . ($fyz ? ' checked' : '') . " style='display:none' onchange='rsRezTypChange(this.value)'>";
+    echo "<div style='font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:2px'>👤 Fyzická osoba</div>";
+    echo "<div style='font-size:12px;color:#666'>Soukromá osoba</div>";
+    echo "</label>";
+    echo "<label id='rs-typ-card-pravnicka' style='flex:1;cursor:pointer;display:block;border:2px solid " . ($prv ? '#1a5c2a' : '#ccc') . ";border-radius:8px;padding:14px 16px;background:" . ($prv ? '#f0f7f1' : '#fff') . ";transition:border-color .15s,background .15s'>";
+    echo "<input type='radio' name='rez_typ' value='pravnicka'" . ($prv ? ' checked' : '') . " style='display:none' onchange='rsRezTypChange(this.value)'>";
+    echo "<div style='font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:2px'>🏢 Právnická osoba</div>";
+    echo "<div style='font-size:12px;color:#666'>Organizace, středisko, oddíl</div>";
+    echo "</label>";
+    echo "</div></div>";
 
     // Fyzická osoba
     echo "<div id='rs-ext-fyzicka'" . ($old_typ === 'pravnicka' ? " style='display:none'" : '') . ">";
@@ -3602,6 +3613,12 @@ function rs_formular_sc(): string {
         document.getElementById('rs-ext-pravnicka').style.display = val==='pravnicka' ? '' : 'none';
         document.querySelectorAll('#rs-ext-fyzicka [data-rs-cond]').forEach(function(el){el.required = val==='fyzicka';});
         document.querySelectorAll('#rs-ext-pravnicka [data-rs-cond]').forEach(function(el){el.required = val==='pravnicka';});
+        ['fyzicka','pravnicka'].forEach(function(t){
+            var card = document.getElementById('rs-typ-card-' + t);
+            if (!card) return;
+            card.style.borderColor = t === val ? '#1a5c2a' : '#ccc';
+            card.style.background  = t === val ? '#f0f7f1' : '#fff';
+        });
     }
     var rsExtSegData = <?php
         $sd = [];
