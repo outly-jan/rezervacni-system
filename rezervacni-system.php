@@ -2164,6 +2164,8 @@ function rs_rez_detail_admin(int $id): string {
         echo "<tr><th>E-mail</th><td>" . esc_html(get_post_meta($id,'rs_email',true)) . "</td></tr>";
     }
     echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
+    $spravce_pozn = get_post_meta($id,'rs_spravce_poznamka',true);
+    if ($spravce_pozn) echo "<tr><th>Vzkaz správce</th><td style='white-space:pre-line'>" . esc_html($spravce_pozn) . "</td></tr>";
     if ($token) echo "<tr><th>Token</th><td><code>" . esc_html($token) . "</code></td></tr>";
     echo "</table>";
 
@@ -4082,8 +4084,10 @@ function rs_schvalit_handler() {
                 $stav   = 'potvrzena';
                 $zprava = rs_alert('Rezervace byla potvrzena a žadatel byl informován e-mailem.');
             } elseif ($action === 'zrusit') {
+                $poznamka_spravce = sanitize_textarea_field($_POST['rs_spravce_poznamka'] ?? '');
                 update_post_meta($rid, 'rs_stav', 'zrusena');
                 delete_post_meta($rid, 'rs_schvalit_token');
+                if ($poznamka_spravce) update_post_meta($rid, 'rs_spravce_poznamka', $poznamka_spravce);
                 rs_notifikuj_zruseni($rid);
                 $stav   = 'zrusena';
                 $zprava = rs_alert('Rezervace byla zamítnuta a žadatel byl informován e-mailem.');
@@ -4157,7 +4161,7 @@ function rs_schvalit_handler() {
     if ($stav === 'cekajici') {
         echo "<form method='post'>" . wp_nonce_field('rs_schvali_' . $token, '_wpnonce', true, false);
         echo "<div class='rs-card'><h4 class='rs-card-title'>Vzkaz objednateli (volitelné)</h4>";
-        echo "<p style='font-size:13px;color:#555;margin:0 0 8px'>Tento text bude přiložen k potvrzovacímu e-mailu objednateli.</p>";
+        echo "<p style='font-size:13px;color:#555;margin:0 0 8px'>Tento text bude přiložen k e-mailu objednateli (u potvrzení i zamítnutí).</p>";
         echo "<textarea name='rs_spravce_poznamka' rows='4' style='width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:3px;font-family:inherit;font-size:13px;resize:vertical'></textarea>";
         echo "</div>";
         echo "<div class='rs-btn-row'>";
