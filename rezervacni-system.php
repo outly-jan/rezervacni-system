@@ -4256,6 +4256,90 @@ function rs_sekce_napoveda(): string {
 <p style="font-size:17px;font-weight:600;margin-top:0">Středisková aplikace pro rezervaci prostor</p>
 <p>Tato aplikace slouží k rezervaci objektů (zatím skautský dům a Smetánka) a jejich částí (místnosti, chatky). Umožňuje přijímat žádosti od veřejnosti i plánovat vlastní interní akce. Všichni tedy na jednom místě uvidíme, kdy kde je nebo není v našich prostorách místo.</p>
 
+<style>
+.rsd-wrap{overflow-x:auto;border:1px solid #cfd9d1;border-radius:8px;background:#fff;margin:12px 0 6px}
+.rsd-wrap svg{display:block;width:100%;min-width:780px;height:auto}
+.rsd-wrap text{fill:#1d2a21;font-family:inherit}
+.rsd-t{font-size:14px;font-weight:600}.rsd-s{font-size:12px;fill:#5b6b60!important}.rsd-f{font-size:12px}
+.rsd-lane,.rsd-hd{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;fill:#1a5c2a!important}
+.rsd-lane tspan{fill:#5b6b60;font-weight:400;text-transform:none;letter-spacing:0;font-size:12px}
+.rsd-lbl{font-size:11.5px;font-style:italic;fill:#5b6b60!important}
+.rsd-band{fill:#eaf0ea}.rsd-box{fill:#fff;stroke:#a9b8ad;stroke-width:1.3}
+.rsd-pending{fill:#fdf0d4;stroke:#b26a00;stroke-width:1.6}.rsd-ok{fill:#dff0e2;stroke:#1a5c2a;stroke-width:1.6}.rsd-bad{fill:#f8e0de;stroke:#a1281f;stroke-width:1.6}
+.rsd-pt{fill:#b26a00!important}.rsd-ot{fill:#1a5c2a!important}.rsd-bt{fill:#a1281f!important}
+.rsd-mail{fill:#fff;stroke:#1a5c2a;stroke-width:1.4;stroke-dasharray:5 4}.rsd-panel{fill:none;stroke:#a9b8ad;stroke-width:1.3}
+.rsd-arr{fill:none;stroke:#5b6b60;stroke-width:1.6}.rsd-ah{fill:#5b6b60}
+.rsd-cap{font-size:13px;color:#555;margin:0 0 4px}
+</style>
+
+<p style="font-weight:600;font-size:15px;margin:20px 0 0">Schéma: jak vznikne rezervace</p>
+<div class="rsd-wrap">
+<svg viewBox="0 0 900 664" role="img" aria-label="Schéma: externí žadatel vybere termín v kalendáři a vyplní formulář, interní rezervace o víkendu, svátku nebo prázdninách také čeká na schválení. Správce rozhodne, žadatel dostane e-mail s výsledkem.">
+<defs><marker id="rsd-ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="rsd-ah"/></marker></defs>
+<rect class="rsd-band" x="10" y="44" width="880" height="140" rx="8"/>
+<rect class="rsd-band" x="10" y="214" width="880" height="170" rx="8"/>
+<text class="rsd-lane" x="24" y="66">Externí rezervace <tspan>&#160;veřejnost a jiné organizace</tspan></text>
+<text class="rsd-lane" x="24" y="236">Interní rezervace <tspan>&#160;vedoucí oddílů po přihlášení</tspan></text>
+
+<rect class="rsd-box" x="24" y="82" width="150" height="64" rx="6"/>
+<text class="rsd-t" x="99" y="108" text-anchor="middle">Žadatel</text><text class="rsd-s" x="99" y="128" text-anchor="middle">veřejnost, organizace</text>
+<path class="rsd-arr" d="M174 114 H212" marker-end="url(#rsd-ah1)"/>
+<rect class="rsd-box" x="214" y="82" width="170" height="64" rx="6"/>
+<text class="rsd-t" x="299" y="108" text-anchor="middle">Kalendář</text><text class="rsd-s" x="299" y="128" text-anchor="middle">vidí volné termíny</text>
+<path class="rsd-arr" d="M384 114 H422" marker-end="url(#rsd-ah1)"/>
+<rect class="rsd-box" x="424" y="82" width="170" height="64" rx="6"/>
+<text class="rsd-t" x="509" y="108" text-anchor="middle">Formulář</text><text class="rsd-s" x="509" y="128" text-anchor="middle">fyzická / právnická osoba</text>
+<path class="rsd-arr" d="M594 114 H618 V168 H648" marker-end="url(#rsd-ah1)"/>
+
+<rect class="rsd-box" x="24" y="278" width="150" height="64" rx="6"/>
+<text class="rsd-t" x="99" y="304" text-anchor="middle">Vedoucí oddílu</text><text class="rsd-s" x="99" y="324" text-anchor="middle">přihlášený uživatel</text>
+<path class="rsd-arr" d="M174 310 H212" marker-end="url(#rsd-ah1)"/>
+<rect class="rsd-box" x="214" y="278" width="170" height="64" rx="6"/>
+<text class="rsd-t" x="299" y="304" text-anchor="middle">Interní formulář</text><text class="rsd-s" x="299" y="324" text-anchor="middle">název akce, oddíl</text>
+<path class="rsd-arr" d="M384 310 H420" marker-end="url(#rsd-ah1)"/>
+<path class="rsd-box" d="M509 258 L594 310 L509 362 L424 310 Z"/>
+<text class="rsd-f" x="509" y="306" text-anchor="middle">Víkend, svátek,</text><text class="rsd-f" x="509" y="322" text-anchor="middle">prázdniny?</text>
+<path class="rsd-arr" d="M594 310 H620 V212 H648" marker-end="url(#rsd-ah1)"/>
+<text class="rsd-lbl" x="598" y="302">ano</text>
+<path class="rsd-arr" d="M509 362 V448" marker-end="url(#rsd-ah1)"/>
+<text class="rsd-lbl" x="517" y="408">ne</text>
+
+<rect class="rsd-pending" x="650" y="132" width="226" height="104" rx="8"/>
+<text class="rsd-t rsd-pt" x="668" y="158">Čeká na schválení</text>
+<text class="rsd-f" x="668" y="180">Žadatel: potvrzení o přijetí</text>
+<text class="rsd-f" x="668" y="198">Správci: e-mail s tlačítky</text>
+<text class="rsd-f" x="668" y="216">Schválit nebo zamítnout</text>
+<path class="rsd-arr" d="M763 236 V288" marker-end="url(#rsd-ah1)"/>
+<text class="rsd-lbl" x="772" y="266">rozhoduje</text>
+<rect class="rsd-box" x="650" y="290" width="226" height="96" rx="8" style="stroke:#1a5c2a;stroke-width:1.8"/>
+<text class="rsd-t" x="668" y="316">Správce rezervací</text>
+<text class="rsd-s" x="668" y="338">schválí nebo zamítne</text><text class="rsd-s" x="668" y="356">a může přidat vzkaz</text><text class="rsd-s" x="668" y="374">pro žadatele</text>
+
+<path class="rsd-arr" d="M690 386 V418 H600 V448" marker-end="url(#rsd-ah1)"/>
+<text class="rsd-lbl" x="632" y="412">schválí</text>
+<path class="rsd-arr" d="M800 386 V448" marker-end="url(#rsd-ah1)"/>
+<text class="rsd-lbl" x="808" y="424">zamítne</text>
+<rect class="rsd-ok" x="424" y="450" width="210" height="70" rx="8"/>
+<text class="rsd-t rsd-ot" x="442" y="478">Potvrzena</text><text class="rsd-f" x="442" y="500">termín je v kalendáři obsazen</text>
+<rect class="rsd-bad" x="650" y="450" width="226" height="70" rx="8"/>
+<text class="rsd-t rsd-bt" x="668" y="478">Zamítnuta nebo zrušena</text><text class="rsd-f" x="668" y="500">termín se uvolní</text>
+
+<path class="rsd-arr" d="M529 520 V554" marker-end="url(#rsd-ah1)"/><path class="rsd-arr" d="M763 520 V554" marker-end="url(#rsd-ah1)"/>
+<rect class="rsd-mail" x="424" y="556" width="452" height="64" rx="8"/>
+<text class="rsd-t" x="442" y="582">E-mail žadateli</text>
+<text class="rsd-s" x="442" y="602">výsledek rozhodnutí, u zamítnutí s vysvětlujícím vzkazem</text>
+<text class="rsd-lbl" x="424" y="644">Skrytou kopii všech e-mailů dostávají určení správci (BCC).</text>
+
+<rect class="rsd-panel" x="24" y="420" width="370" height="214" rx="8"/>
+<text class="rsd-hd" x="42" y="446">Kdo co smí</text>
+<text class="rsd-t" x="42" y="472" style="font-size:13px">Veřejnost</text><text class="rsd-s" x="42" y="489">vidí obsazenost v kalendáři, podá žádost</text>
+<text class="rsd-t" x="42" y="512" style="font-size:13px">Vedoucí oddílu</text><text class="rsd-s" x="42" y="529">zadá interní rezervaci, vidí přehled všech</text>
+<text class="rsd-t" x="42" y="552" style="font-size:13px">Správce</text><text class="rsd-s" x="42" y="569">schvaluje, ruší, opravuje kontakty, znovu pošle e-mail</text>
+<text class="rsd-t" x="42" y="592" style="font-size:13px">Administrátor</text><text class="rsd-s" x="42" y="609">spravuje prostory, ceny a nastavení e-mailů</text>
+</svg>
+</div>
+<p class="rsd-cap">Externí žádost vždy čeká na správce. Interní rezervace se potvrdí hned, jen víkend, státní svátek a školní prázdniny (termíny pro placený pronájem) také vyžadují schválení.</p>
+
 <hr style="margin:24px 0">
 
 <p style="font-weight:600;font-size:15px;margin-bottom:6px">Co vidí veřejnost (nepřihlášení návštěvníci)</p>
@@ -4318,6 +4402,52 @@ function rs_sekce_napoveda(): string {
     </ul>
   </li>
 </ul>
+
+<hr style="margin:24px 0">
+
+<p style="font-weight:600;font-size:15px;margin:0">Schéma: co admin nastavuje a kam se to promítne</p>
+<div class="rsd-wrap">
+<svg viewBox="0 0 900 700" role="img" aria-label="Schéma nastavení: typy a objekty určují nabídku ve formuláři, ceník výpočet ceny, prázdniny a svátky schvalování interních rezervací, vzdušné seznam ubytovaných, e-maily rozesílání notifikací, součásti střediska výběr oddílu a role oprávnění v aplikaci.">
+<defs><marker id="rsd-ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="rsd-ah"/></marker></defs>
+<text class="rsd-hd" x="24" y="40">Admin nastavuje</text>
+<text class="rsd-hd" x="415" y="40" text-anchor="middle">Pravidlo</text>
+<text class="rsd-hd" x="518" y="40">Kde se to projeví</text>
+
+<rect class="rsd-box" x="24" y="62" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="89">Typy objektů a Objekty</text><text class="rsd-s" x="40" y="109">kapacita, popis, GPS, fotky, vypnutí</text>
+<path class="rsd-arr" d="M314 94 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="86" text-anchor="middle">nabízí se jen zapnuté</text>
+<rect class="rsd-ok" x="518" y="62" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="89">Veřejný kalendář a formulář</text><text class="rsd-s" x="534" y="109">žadatel vybere objekt nebo jeho část</text>
+
+<rect class="rsd-box" x="24" y="140" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="167">Ceny</text><text class="rsd-s" x="40" y="187">za osobu, minimum, celek nebo části</text>
+<path class="rsd-arr" d="M314 172 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="164" text-anchor="middle">osoby × noci, min. cena</text>
+<rect class="rsd-ok" x="518" y="140" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="167">Cena u rezervace a v e-mailu</text><text class="rsd-s" x="534" y="187">správce ji může v detailu přepsat</text>
+
+<rect class="rsd-box" x="24" y="218" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="245">Prázdniny a svátky</text><text class="rsd-s" x="40" y="265">státní svátky, Velikonoce, prázdniny</text>
+<path class="rsd-arr" d="M314 250 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="242" text-anchor="middle">termín je chráněný</text>
+<rect class="rsd-pending" x="518" y="218" width="358" height="64" rx="6"/><text class="rsd-t rsd-pt" x="534" y="245">Interní rezervace čeká na schválení</text><text class="rsd-s" x="534" y="265" style="fill:#1d2a21!important">opakující se série tyto dny přeskočí</text>
+
+<rect class="rsd-box" x="24" y="296" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="323">Vzdušné</text><text class="rsd-s" x="40" y="343">věkové kategorie, sazby, neplatící</text>
+<path class="rsd-arr" d="M314 328 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="320" text-anchor="middle">po potvrzení rezervace</text>
+<rect class="rsd-ok" x="518" y="296" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="323">Seznam ubytovaných od žadatele</text><text class="rsd-s" x="534" y="343">upomínka 7 dní a 1 den před (denně v 8:00)</text>
+
+<rect class="rsd-box" x="24" y="374" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="401">E-maily</text><text class="rsd-s" x="40" y="421">příjemci, BCC všech, kontaktní osoba</text>
+<path class="rsd-arr" d="M314 406 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="398" text-anchor="middle">rozesílá notifikace</text>
+<rect class="rsd-mail" x="518" y="374" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="401">Nová žádost jde správcům a CC</text><text class="rsd-s" x="534" y="421">vše také na BCC, podpis a Reply-To z kontaktu</text>
+
+<rect class="rsd-box" x="24" y="452" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="479">Součásti střediska a texty</text><text class="rsd-s" x="40" y="499">oddíly, doplňující informace</text>
+<path class="rsd-arr" d="M314 484 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="476" text-anchor="middle">doplní formuláře</text>
+<rect class="rsd-ok" x="518" y="452" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="479">Výběr oddílu v interním formuláři</text><text class="rsd-s" x="534" y="499">text pod veřejným formulářem a v kalendáři</text>
+
+<rect class="rsd-box" x="24" y="530" width="290" height="64" rx="6"/><text class="rsd-t" x="40" y="557">Role uživatelů</text><text class="rsd-s" x="40" y="577">WordPress: vedení, správce, admin</text>
+<path class="rsd-arr" d="M314 562 H516" marker-end="url(#rsd-ah2)"/><text class="rsd-lbl" x="415" y="554" text-anchor="middle">řídí oprávnění</text>
+<rect class="rsd-ok" x="518" y="530" width="358" height="64" rx="6"/><text class="rsd-t" x="534" y="557">Které záložky kdo vidí</text><text class="rsd-s" x="534" y="577">od vedení po admina přibývá práv</text>
+
+<rect class="rsd-panel" x="24" y="612" width="852" height="72" rx="8"/>
+<text class="rsd-hd" x="42" y="636">Technický základ</text>
+<text class="rsd-s" x="42" y="657">Tři shortcody na stránkách webu: [rs_kalendar], [rs_formular], [rs_admin].</text>
+<text class="rsd-s" x="42" y="674">Data jsou vlastní typy příspěvků WordPressu, denní plánovač (cron) v 8:00 posílá upomínky.</text>
+</svg>
+</div>
+<p class="rsd-cap">Každé nastavení vlevo je pravidlo, které se pak samo uplatní ve formulářích, e-mailech a oprávněních vpravo.</p>
 
 <hr style="margin:24px 0">
 
