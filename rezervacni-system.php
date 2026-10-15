@@ -115,12 +115,16 @@ function rs_nth_weekday_of_month(int $y, int $m, int $dow, int $nth): ?string {
     return null;
 }
 
-function rs_je_volno(int $prostor_id, array $seg_ids, string $od, string $do, int $skip = 0): bool {
+function rs_je_volno(int $prostor_id, array $seg_ids, string $od, string $do, int $skip = 0, string $nova_typ = ''): bool {
     $all = get_posts(['post_type' => 'rs_rezervace', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids']);
     $od_ts = strtotime($od); $do_ts = strtotime($do);
     foreach ($all as $rid) {
         if ($rid === $skip) continue;
         if (get_post_meta($rid, 'rs_stav', true) === 'zrusena') continue;
+        // Interní rezervaci nevadí čekající (neschválená) externí rezervace
+        if ($nova_typ === 'interni'
+            && get_post_meta($rid, 'rs_stav', true) === 'cekajici'
+            && get_post_meta($rid, 'rs_typ_rezervace', true) !== 'interni') continue;
         $r_od = strtotime(get_post_meta($rid, 'rs_datum_od', true));
         $r_do = strtotime(get_post_meta($rid, 'rs_datum_do', true));
         if ($od_ts >= $r_do || $do_ts <= $r_od) continue;
@@ -232,7 +236,8 @@ function rs_ajax_check_volno(): void {
     $do_ = $cd ? $do_raw . ' 23:59:00' : str_replace('T', ' ', $do_raw) . ':00';
     if (strtotime($od) >= strtotime($do_)) { wp_send_json_success(null); return; }
     $seg_ids = array_map('intval', (array)($_POST['seg_ids'] ?? []));
-    wp_send_json_success(['volno' => rs_je_volno($pid, $seg_ids, $od, $do_)]);
+    $nova_typ = sanitize_key($_POST['typ'] ?? '');
+    wp_send_json_success(['volno' => rs_je_volno($pid, $seg_ids, $od, $do_, 0, $nova_typ)]);
 }
 function rs_ares_ajax() {
     if (!wp_verify_nonce($_POST['nonce'] ?? '', 'rs_public')) wp_send_json_error('Unauthorized');
@@ -2598,7 +2603,7 @@ function rs_sekce_interni(): string {
             el.innerHTML='<span style="color:#888">Kontroluji dostupnost…</span>';
             var segs = Array.from(document.querySelectorAll('[name="int_segmenty[]"]:checked')).map(function(c){return '&seg_ids[]='+c.value;}).join('');
             fetch(rsIntAjaxUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-                body:'action=rs_check_volno&nonce='+rsIntNonce+'&prostor_id='+encodeURIComponent(pid)+'&datum_od='+encodeURIComponent(od)+'&datum_do='+encodeURIComponent(do_)+'&cely_den='+(cd?'1':'')+segs})
+                body:'action=rs_check_volno&nonce='+rsIntNonce+'&prostor_id='+encodeURIComponent(pid)+'&datum_od='+encodeURIComponent(od)+'&datum_do='+encodeURIComponent(do_)+'&cely_den='+(cd?'1':'')+'&typ=interni'+segs})
             .then(function(r){return r.json();})
             .then(function(d){
                 if(!d.success||d.data===null){el.innerHTML='';return;}
@@ -2647,7 +2652,7 @@ function rs_interni_zpracuj(string $action): string {
             }
             if (!$od || !$do_) return rs_alert('Zadejte termín.','error');
             if (strtotime($od) >= strtotime($do_)) return rs_alert('Datum konce musí být po datu začátku.','error');
-            if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_)) return rs_alert('Zvolený termín není volný.','error');
+            if (!rs_je_volno($prostor_id,$seg_ids,$od,$do_,0,'interni')) return rs_alert('Zvolený termín není volný.','error');
             $stav = rs_potreba_schvaleni_interni($od) ? 'cekajici' : 'potvrzena';
             $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,'');
             update_post_meta($rid,'rs_nazev',$nazev);
@@ -2720,7 +2725,7 @@ function rs_interni_zpracuj(string $action): string {
             if (!$skip) {
                 $od  = $d . ' ' . $cas_od . ':00';
                 $do_ = $d . ' ' . $cas_do . ':00';
-                if (rs_je_volno($prostor_id,$seg_ids,$od,$do_)) {
+                if (rs_je_volno($prostor_id,$seg_ids,$od,$do_,0,'interni')) {
                     $stav = rs_potreba_schvaleni_interni($d) ? 'cekajici' : 'potvrzena';
                     $rid  = rs_vytvor_rezervaci_post($prostor_id,$seg_ids,$od,$do_,$pocet,'interni',$stav,$uid,$poznamka,$skupina_id);
                     update_post_meta($rid,'rs_nazev',$nazev);
@@ -3515,7 +3520,7 @@ function rs_formular_sc(): string {
     echo "</div></div>";
 
     // Fyzická osoba
-    echo "<div id='rs-ext-fyzicka'" . ($old_typ === 'pravnicka' ? " style='display:none'" : '') . ">";
+    echo "<div id='rs-ext-fyzicka' style='margin-top:16px" . ($old_typ === 'pravnicka' ? ";display:none" : "") . "'>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>Jméno *</label><input type='text' name='fyzicka_jmeno'" . $ov('fyzicka_jmeno') . " required minlength='2' data-rs-cond></div>";
     echo "<div class='rs-form-group'><label>Příjmení *</label><input type='text' name='fyzicka_prijmeni'" . $ov('fyzicka_prijmeni') . " required minlength='2' data-rs-cond></div>";
@@ -3543,7 +3548,7 @@ function rs_formular_sc(): string {
     echo "</div>"; // fyzicka
 
     // Právnická osoba
-    echo "<div id='rs-ext-pravnicka'" . ($old_typ !== 'pravnicka' ? " style='display:none'" : '') . ">";
+    echo "<div id='rs-ext-pravnicka' style='margin-top:16px" . ($old_typ !== 'pravnicka' ? ";display:none" : "") . "'>";
     echo "<div class='rs-form-row'>";
     echo "<div class='rs-form-group'><label>IČO *</label><div style='display:flex;gap:8px;align-items:center'><input type='text' name='pravnicka_ico' id='rs-ico' maxlength='8' style='width:130px'" . $ov('pravnicka_ico') . "><button type='button' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='rsAresLoad()'>🔍 Načíst z ARES</button></div></div>";
     echo "</div>";
