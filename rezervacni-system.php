@@ -665,9 +665,9 @@ function rs_css() { ?>
 <style>
 .rs-wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;max-width:1000px}
 .rs-menu{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0;border-bottom:3px solid #1a5c2a}
-.rs-menu button{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;white-space:nowrap;transition:background .15s;margin-bottom:-1px}
+.rs-menu button{font-size:12px;padding:7px 13px;background:#f0f0f0;color:#444;border:1px solid #ccc;border-bottom:2px solid #1a5c2a;border-radius:4px 4px 0 0;cursor:pointer;white-space:nowrap;transition:background .15s;margin-bottom:-2px}
 .rs-menu button:hover{background:#e0e0e0}
-.rs-menu button.rs-active{background:#1a5c2a;color:#fff;border-color:#1a5c2a;font-weight:600}
+.rs-menu button.rs-active{background:#1a5c2a;color:#fff;border-color:#1a5c2a;border-bottom:none;margin-bottom:0;font-weight:600}
 .rs-panels{padding:20px;background:#fff;border:1px solid #1a5c2a;border-top:none}
 .rs-panels>div{display:none}.rs-panels>div.rs-active{display:block}
 .rs-card{background:#fafafa;border:1px solid #ddd;border-radius:4px;padding:18px 20px;margin-bottom:20px}
@@ -4278,6 +4278,7 @@ function rs_sekce_napoveda(): string {
 function rs_sekce_prehled_kalendar(): string {
     $prostory = rs_get_prostory();
     if (empty($prostory)) return '<p>Žádné prostory nejsou zatím k dispozici.</p>';
+    $prehled_typ = sanitize_key($_GET['rs_prehled_typ'] ?? 'vse');
 
     $rok   = (int)($_GET['rs_prek_rok']   ?? date('Y'));
     $mesic = (int)($_GET['rs_prek_mesic'] ?? date('n'));
@@ -4576,9 +4577,22 @@ function rs_sekce_prehled_kalendar(): string {
     </script>
     <?php
     // ─── Tabulka přehledu ─────────────────────────────────────────────────
+    $preh_meta_q = [['key'=>'rs_stav','value'=>'zrusena','compare'=>'!=']];
+    if ($prehled_typ === 'interni') $preh_meta_q[] = ['key'=>'rs_typ_rezervace','value'=>'interni'];
+    elseif ($prehled_typ === 'externi') $preh_meta_q[] = ['key'=>'rs_typ_rezervace','value'=>'externi'];
     $all_rez_preh = get_posts(['post_type'=>'rs_rezervace','post_status'=>'publish','numberposts'=>-1,
         'orderby'=>'meta_value','meta_key'=>'rs_datum_od','order'=>'ASC',
-        'meta_query'=>[['key'=>'rs_stav','value'=>'zrusena','compare'=>'!=']]]);
+        'meta_query'=>$preh_meta_q]);
+
+    echo "<hr style='margin:24px 0 16px;border:none;border-top:2px solid #1a5c2a'>";
+    echo "<h4 style='color:#1a5c2a;margin:0 0 12px'>Všechny rezervace</h4>";
+    $preh_base_url = remove_query_arg('rs_prehled_typ');
+    echo "<div style='display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap'>";
+    foreach (['vse'=>'Vše', 'interni'=>'👥 Interní', 'externi'=>'🌐 Externí'] as $k => $l) {
+        $cls = $prehled_typ === $k ? 'rs-btn-primary' : 'rs-btn-secondary';
+        echo "<a href='" . esc_url($k === 'vse' ? $preh_base_url . '#rs-prehled' : add_query_arg('rs_prehled_typ', $k, $preh_base_url) . '#rs-prehled') . "' class='rs-btn rs-btn-sm {$cls}'>{$l}</a>";
+    }
+    echo "</div>";
 
     if (!empty($all_rez_preh)) {
         $preh_groups  = [];
@@ -4590,8 +4604,6 @@ function rs_sekce_prehled_kalendar(): string {
         }
         $dny_cs_p = [1=>'Pondělí',2=>'Úterý',3=>'Středa',4=>'Čtvrtek',5=>'Pátek',6=>'Sobota',7=>'Neděle'];
 
-        echo "<hr style='margin:24px 0 16px;border:none;border-top:2px solid #1a5c2a'>";
-        echo "<h4 style='color:#1a5c2a;margin:0 0 12px'>Všechny rezervace</h4>";
         echo "<div style='overflow-x:auto'><table class='rs-table rs-resp'>";
         echo "<thead><tr><th>Název</th><th>Objekt</th><th>Termín</th><th>Rezervující</th><th>Součást střediska</th><th>Stav</th></tr></thead><tbody>";
 
@@ -4666,6 +4678,8 @@ function rs_sekce_prehled_kalendar(): string {
         }
 
         echo "</tbody></table></div>";
+    } else {
+        echo "<p style='color:#777;font-size:13px'>Žádné rezervace.</p>";
     }
 
     echo "</div>"; // #rs-prehled
