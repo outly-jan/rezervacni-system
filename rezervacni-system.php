@@ -4612,7 +4612,7 @@ function rs_sekce_prehled_kalendar(): string {
             $first   = $g_rez[0];
             $last    = end($g_rez);
             $typ_r   = get_post_meta($first->ID,'rs_typ_rezervace',true);
-            $nazev   = get_post_meta($first->ID,'rs_nazev',true) ?: ($typ_r === 'externi' ? rs_rez_jmeno($first->ID) : '–');
+            $nazev   = $typ_r === 'externi' ? '–' : (get_post_meta($first->ID,'rs_nazev',true) ?: '–');
             $prostor = get_the_title((int)get_post_meta($first->ID,'rs_prostor_id',true));
             $oddil   = get_post_meta($first->ID,'rs_oddil',true);
             $uid     = (int)(get_post_meta($first->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($first->ID,'rs_wp_user_id',true));
@@ -4663,7 +4663,7 @@ function rs_sekce_prehled_kalendar(): string {
 
         foreach ($preh_singles as $r) {
             $typ_r   = get_post_meta($r->ID,'rs_typ_rezervace',true);
-            $nazev   = get_post_meta($r->ID,'rs_nazev',true) ?: ($typ_r === 'externi' ? rs_rez_jmeno($r->ID) : '–');
+            $nazev   = $typ_r === 'externi' ? '–' : (get_post_meta($r->ID,'rs_nazev',true) ?: '–');
             $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
             $stav    = get_post_meta($r->ID,'rs_stav',true);
             $oddil   = get_post_meta($r->ID,'rs_oddil',true);
