@@ -1870,6 +1870,7 @@ function rs_sekce_rezervace(): string {
             }
             $zprava = rs_alert('Kontaktní údaje uloženy.');
         } elseif ($action === 'znovu_odeslat_mail' && $rid) {
+            update_post_meta($rid, 'rs_spravce_poznamka', sanitize_textarea_field($_POST['rs_spravce_poznamka'] ?? ''));
             rs_notifikuj_znovu_zakaznikovi($rid);
             $zprava = rs_alert('E-mail žadateli odeslán.');
         } elseif ($action === 'odeslat_ucastnici' && $rid) {
@@ -2165,7 +2166,6 @@ function rs_rez_detail_admin(int $id): string {
     }
     echo "<tr><th>Cena</th><td>" . ($cena > 0 ? number_format($cena,0,'.',' ') . ' Kč' : 'zatím neurčena') . "</td></tr>";
     $spravce_pozn = get_post_meta($id,'rs_spravce_poznamka',true);
-    if ($spravce_pozn) echo "<tr><th>Vzkaz správce</th><td style='white-space:pre-line'>" . esc_html($spravce_pozn) . "</td></tr>";
     if ($token) echo "<tr><th>Token</th><td><code>" . esc_html($token) . "</code></td></tr>";
     echo "</table>";
 
@@ -2190,11 +2190,16 @@ function rs_rez_detail_admin(int $id): string {
     echo "<div class='rs-btn-row'><button type='submit' class='rs-btn rs-btn-primary rs-btn-sm'>💾 Uložit kontakt</button></div>";
     echo "</form></details>";
 
-    // Znovu odeslat e-mail žadateli
-    echo "<form method='post' style='margin-top:10px;display:inline-block'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
-    echo "<input type='hidden' name='rs_rez_action' value='znovu_odeslat_mail'><input type='hidden' name='rez_id' value='{$id}'>";
+    // Vzkaz správce + znovu odeslat
     $stav_label = ['cekajici'=>'(žádost přijata)','potvrzena'=>'(potvrzení)','zrusena'=>'(zrušení)'];
-    echo "<button type='submit' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='return confirm(\"Odeslat e-mail žadateli?\")'>📧 Znovu odeslat e-mail žadateli " . ($stav_label[$stav] ?? '') . "</button></form>";
+    echo "<div style='margin-top:16px'>";
+    echo "<p style='font-size:13px;font-weight:600;color:#444;margin:0 0 4px'>Vzkaz správce objednateli</p>";
+    echo "<p style='font-size:12px;color:#777;margin:0 0 6px'>Přiloží se k e-mailu při opětovném odeslání.</p>";
+    echo "<form method='post'>" . wp_nonce_field('rs_rez_spravce','_wpnonce',true,false);
+    echo "<input type='hidden' name='rs_rez_action' value='znovu_odeslat_mail'><input type='hidden' name='rez_id' value='{$id}'>";
+    echo "<textarea name='rs_spravce_poznamka' rows='3' style='width:100%;max-width:520px;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:3px;font-family:inherit;font-size:13px;resize:vertical'>" . esc_textarea($spravce_pozn) . "</textarea>";
+    echo "<div class='rs-btn-row' style='margin-top:6px'><button type='submit' class='rs-btn rs-btn-secondary rs-btn-sm' onclick='return confirm(\"Odeslat e-mail žadateli?\")'>📧 Uložit vzkaz a znovu odeslat e-mail " . ($stav_label[$stav] ?? '') . "</button></div>";
+    echo "</form></div>";
 
     // Individuální cena
     if ($stav !== 'zrusena') {
