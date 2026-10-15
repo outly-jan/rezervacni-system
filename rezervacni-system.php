@@ -4200,9 +4200,10 @@ function rs_sekce_napoveda(): string {
 
 <p style="font-weight:600;font-size:15px;margin-bottom:6px">Co vidí veřejnost (nepřihlášení návštěvníci)</p>
 <ul>
-  <li><strong>Kalendář obsazenosti</strong> – přehledný měsíční kalendář zobrazující, kdy jsou objekty zcela nebo částečně obsazené a kdy volné. Veřejnost však nevidí žádné detaily rezervací. Odlišeny jsou potvrzené a čekající rezervace.</li>
+  <li><strong>Kalendář obsazenosti</strong> – přehledný měsíční kalendář zobrazující, kdy jsou objekty zcela nebo částečně obsazené a kdy volné. Veřejnost nevidí žádné detaily rezervací. Odlišeny jsou potvrzené a čekající rezervace. U vícedenních rezervací se v detailním popisu zobrazuje celé datum i čas začátku a konce (např. „6. 11. 2026 v 17:00 – 8. 11. 2026 v 15:00"), aby nedocházelo k záměně.</li>
   <li><strong>Formulář pro poptávku prostor</strong> – návštěvník vyplní své kontaktní údaje, zvolí požadovaný termín (aplikace automaticky kontroluje dostupnost) a objekt, uvede počet osob a odešle žádost. Ta pak čeká na schválení správcem.
     <ul style="margin-top:6px">
+      <li>Formulář rozlišuje <strong>fyzickou osobu</strong> (soukromá osoba) a <strong>právnickou osobu</strong> (organizace, spolek, škola…) – výchozí volba je právnická osoba, protože většinu rezervací zadávají skautská střediska a oddíly. Podle zvoleného typu se zobrazí příslušná pole (u právnické osoby navíc název organizace a IČO).</li>
       <li>Po odeslání žadatel obdrží e-mail s potvrzením přijetí žádosti a <strong>jedinečným odkazem pro správu své rezervace</strong>. Přes tento odkaz může sledovat stav rezervace (čeká / potvrzena / zrušena) a v případě potvrzení i vyplnit seznam ubytovaných osob. Žádost ani termín přes tento odkaz měnit nelze – změny řeší správce.</li>
       <li>Jakmile správce rezervaci potvrdí nebo zamítne, přijde žadateli automatický e-mail s výsledkem a orientační cenou.</li>
       <li>Je-li zapnuta funkce <strong>ubytovacího poplatku (vzdušného)</strong>, je žadatel po potvrzení rezervace vyzván k vyplnění jmen a dat narození všech ubytovaných osob. Upomínkový e-mail se automaticky odešle 7 dní a znovu 1 den před začátkem pobytu, pokud seznam dosud nebyl vyplněn.</li>
@@ -4218,11 +4219,12 @@ function rs_sekce_napoveda(): string {
   <li>Zadat interní akci oddílu (výprava, oddílová rada, přespávačka apod.) přímo bez schvalovacího procesu.</li>
   <li>Nastavit opakující se rezervaci – například týdenní schůzky na celou sezónu – jedním kliknutím. Lze zvolit <strong>více dní v týdnu najednou</strong> (např. pondělí a středa) a nastavit <strong>interval opakování</strong> (každý týden, ob týden, každý třetí týden…). Systém automaticky přeskočí státní svátky a prázdniny (lze volitelně vypnout), takže není třeba výjimky zadávat ručně. Všechny termíny série se v přehledu zobrazí sbalené pod jedno označení, aby tabulku nepřeplňovaly.</li>
   <li>Zrušit jednotlivé termíny nebo celou sérii najednou – každý vedoucí ale může rušit jen rezervace, které sám vytvořil, ne rezervace ostatních vedoucích.</li>
+  <li><strong>Interní rezervace na termín s čekající externí žádostí</strong> – pokud na daný termín čeká neschválená externí rezervace, vedení může přesto zadat interní žádost na stejný čas. Interní žádost se automaticky nezapíše; čeká rovněž na schválení. Správce pak rozhodne, které žádosti dá přednost – interní nebo externí. Kolidující potvrzené rezervace tento postup neobchází; ty termín stále blokují.</li>
 </ul>
 
 <hr style="margin:24px 0">
 
-<p style="font-weight:600;font-size:15px;margin-bottom:6px">Správce rezervací (Vráťa)</p>
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Správce rezervací</p>
 <p>Správce má navíc záložku <strong>Správa rezervací</strong>, kde:</p>
 <ul>
   <li>Vidí všechny rezervace rozdělené na <strong>Externí</strong> (žádosti od veřejnosti) a <strong>Interní</strong> (akce oddílu).</li>
@@ -4230,6 +4232,15 @@ function rs_sekce_napoveda(): string {
   <li>U externích rezervací vidí kontaktní údaje žadatele, termín, počet osob a stav rezervace.</li>
   <li>Cena je automaticky vypočtena podle ceníku a zobrazena u každé rezervace. Systém přitom respektuje nastavenou minimální cenu – pokud by výsledná cena za počet osob a nocí byla nižší, naúčtuje se minimální cena. Správce ji může v případě potřeby individuálně upravit přímo v detailu rezervace.</li>
   <li>Může kdykoli zobrazit detail rezervace, upravit ji nebo ji zrušit.</li>
+  <li>V detailu externí rezervace může <strong>upravit kontaktní údaje žadatele</strong> (jméno, e-mail, telefon) a v případě potřeby <strong>znovu odeslat potvrzovací e-mail</strong> žadateli – například pokud byl původní e-mail doručen na špatnou adresu.</li>
+</ul>
+
+<p style="margin-top:12px"><strong>Notifikační e-maily správci</strong> – při každé nové žádosti o rezervaci přijde správci (a dalším nastaveným adresátům) přehledný HTML e-mail obsahující:</p>
+<ul>
+  <li>název objektu a požadovaný termín,</li>
+  <li>kontaktní údaje žadatele (jméno, e-mail, telefon, typ osoby),</li>
+  <li>přehled obsazenosti objektu ±3 dny kolem žádaného termínu s barevným rozlišením stavů,</li>
+  <li>přímé tlačítko pro schválení nebo zamítnutí bez nutnosti přihlašovat se do administrace.</li>
 </ul>
 
 <hr style="margin:24px 0">
@@ -4240,7 +4251,22 @@ function rs_sekce_napoveda(): string {
   <li><strong>Typy objektů</strong> – definuje kategorie (např. skautský dům, příměstský areál, tábořiště atp.).</li>
   <li><strong>Objekty</strong> – spravuje konkrétní pronajímatelné prostory, jejich kapacitu, popis (rozloha, kapacita osob, adresa a GPS souřadnice – ty se zobrazují jako přímý proklik do mapy na mapy.cz), fotografie a přiřazení k typu. Každý objekt nebo jeho část lze dočasně vypnout z nabídky pro veřejnost – buď na konkrétní časové rozmezí, nebo do odvolání.</li>
   <li><strong>Ceník pronájmu objektů</strong> – definuje ceny za nocleh a pobyt. Je-li zapnuta funkce vzdušného (ubytovacího poplatku), nastaví se zde sazby podle věkových kategorií ubytovaných. Systém počítá i s tím, že případná městská vyhláška může určité osoby od poplatku osvobodit (například dospělý doprovod) – taková kategorie se označí jako neplatící a do výpočtu se nezapočítá.</li>
-  <li><strong>Nastavení</strong> – další obecná konfigurace systému (parametry notifikačních e-mailů atp.).</li>
+  <li><strong>Nastavení</strong> – další obecná konfigurace systému:
+    <ul style="margin-top:6px">
+      <li><em>CC e-maily pro správce</em> – seznam adres (oddělených čárkou nebo novým řádkem), které mají dostávat kopie notifikací o nových rezervacích zasílaných správcům.</li>
+      <li><em>BCC ke všem notifikacím</em> – seznam adres, které dostávají slepou kopii každého notifikačního e-mailu odeslaného systémem (nejen správcovských notifikací, ale i potvrzení žadatelům apod.).</li>
+    </ul>
+  </li>
+</ul>
+
+<hr style="margin:24px 0">
+
+<p style="font-weight:600;font-size:15px;margin-bottom:6px">Role a oprávnění</p>
+<p>Systém používá tři úrovně přístupu:</p>
+<ul>
+  <li><strong>Vedení oddílu</strong> – uživatelé s rolí <em>Vedení rezervačního systému</em>. Mohou zadávat a rušit vlastní interní rezervace.</li>
+  <li><strong>Správce rezervací</strong> – uživatelé s rolí <em>Správce rezervací</em>. Mají vše jako vedení + mohou schvalovat a zamítat rezervace, editovat kontaktní údaje žadatelů a spravovat všechny rezervace.</li>
+  <li><strong>Administrátor systému</strong> – uživatelé s rolí <em>Administrátor rezervačního systému</em> nebo WordPress administrátor. Mají plný přístup včetně nastavení objektů, ceníků a systémových parametrů.</li>
 </ul>
 
 </div>
