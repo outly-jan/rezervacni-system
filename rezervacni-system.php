@@ -2996,7 +2996,7 @@ function rs_kalendar_sc(array $atts): string {
         $typ = $p_typy[$p->ID];
         $lbl = "<span style='display:block;line-height:1.2'>" . esc_html($p->post_title) . "</span>";
         if ($typ) $lbl .= "<span style='display:block;font-size:11px;font-weight:400;opacity:" . ($a ? '.8' : '.65') . ";margin-top:2px'>" . esc_html($typ) . "</span>";
-        echo "<button data-rs-tab='" . (int)$p->ID . "' onclick='rsTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:none;background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . ";text-align:left'>{$lbl}</button>";
+        echo "<button data-rs-tab='" . (int)$p->ID . "' onclick='rsTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:" . ($a ? 'none' : '2px solid #1a5c2a') . ";background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . ";text-align:left'>{$lbl}</button>";
     }
     echo "</div>";
 
@@ -4389,7 +4389,7 @@ function rs_sekce_prehled_kalendar(): string {
         if ($tid_p) $typ = get_the_title($tid_p);
         $lbl = "<span style='display:block;line-height:1.2'>" . esc_html($p->post_title) . "</span>";
         if ($typ) $lbl .= "<span style='display:block;font-size:11px;font-weight:400;opacity:" . ($a ? '.8' : '.65') . ";margin-top:2px'>" . esc_html($typ) . "</span>";
-        echo "<button data-preh-tab='" . (int)$p->ID . "' onclick='rsPrehTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:none;background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . ";text-align:left'>{$lbl}</button>";
+        echo "<button data-preh-tab='" . (int)$p->ID . "' onclick='rsPrehTab(" . (int)$p->ID . ")' style='padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;border-radius:4px 4px 0 0;margin-right:3px;margin-bottom:-2px;border:1px solid #1a5c2a;border-bottom:" . ($a ? 'none' : '2px solid #1a5c2a') . ";background:" . ($a ? '#1a5c2a' : '#f4f8f4') . ";color:" . ($a ? '#fff' : '#1a5c2a') . ";text-align:left'>{$lbl}</button>";
     }
     echo "</div>";
 
@@ -4611,11 +4611,13 @@ function rs_sekce_prehled_kalendar(): string {
         foreach ($preh_groups as $sk_id => $g_rez) {
             $first   = $g_rez[0];
             $last    = end($g_rez);
-            $nazev   = get_post_meta($first->ID,'rs_nazev',true) ?: '–';
+            $typ_r   = get_post_meta($first->ID,'rs_typ_rezervace',true);
+            $nazev   = get_post_meta($first->ID,'rs_nazev',true) ?: ($typ_r === 'externi' ? rs_rez_jmeno($first->ID) : '–');
             $prostor = get_the_title((int)get_post_meta($first->ID,'rs_prostor_id',true));
             $oddil   = get_post_meta($first->ID,'rs_oddil',true);
             $uid     = (int)(get_post_meta($first->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($first->ID,'rs_wp_user_id',true));
             $user_p  = get_userdata($uid);
+            $rez_name_g = $user_p ? $user_p->display_name : ($typ_r === 'externi' ? rs_rez_jmeno($first->ID) : '–');
             $fod     = get_post_meta($first->ID,'rs_datum_od',true);
             $fdo     = get_post_meta($first->ID,'rs_datum_do',true);
             $lod     = get_post_meta($last->ID,'rs_datum_od',true);
@@ -4636,7 +4638,7 @@ function rs_sekce_prehled_kalendar(): string {
             echo "<td data-label='Název'><span id='{$gpid}-ico' style='font-size:10px;margin-right:5px'>▶</span><strong>" . esc_html($nazev) . "</strong> <span style='color:#777;font-size:12px'>({$count}×)</span></td>";
             echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
             echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin)) . "</td>";
-            echo "<td data-label='Rezervující'>" . esc_html($user_p ? $user_p->display_name : '–') . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($rez_name_g) . "</td>";
             echo "<td data-label='Součást střediska'>" . esc_html($oddil ?: '–') . "</td>";
             echo "<td data-label='Stav' style='white-space:nowrap'>";
             if ($n_pot) echo "<span style='display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;background:#1a5c2a;color:#fff;margin-right:2px'>{$n_pot}✓</span>";
@@ -4660,18 +4662,20 @@ function rs_sekce_prehled_kalendar(): string {
         }
 
         foreach ($preh_singles as $r) {
-            $nazev   = get_post_meta($r->ID,'rs_nazev',true) ?: '–';
+            $typ_r   = get_post_meta($r->ID,'rs_typ_rezervace',true);
+            $nazev   = get_post_meta($r->ID,'rs_nazev',true) ?: ($typ_r === 'externi' ? rs_rez_jmeno($r->ID) : '–');
             $prostor = get_the_title((int)get_post_meta($r->ID,'rs_prostor_id',true));
             $stav    = get_post_meta($r->ID,'rs_stav',true);
             $oddil   = get_post_meta($r->ID,'rs_oddil',true);
             $uid     = (int)(get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: get_post_meta($r->ID,'rs_wp_user_id',true));
             $user_p  = get_userdata($uid);
+            $rez_name = $user_p ? $user_p->display_name : ($typ_r === 'externi' ? rs_rez_jmeno($r->ID) : '–');
             $termin  = rs_format_termin(get_post_meta($r->ID,'rs_datum_od',true), get_post_meta($r->ID,'rs_datum_do',true));
             echo "<tr>";
             echo "<td data-label='Název'>" . esc_html($nazev) . "</td>";
             echo "<td data-label='Objekt'>" . esc_html($prostor) . "</td>";
             echo "<td data-label='Termín' style='font-size:12px;white-space:nowrap'>" . nl2br(esc_html($termin)) . "</td>";
-            echo "<td data-label='Rezervující'>" . esc_html($user_p ? $user_p->display_name : '–') . "</td>";
+            echo "<td data-label='Rezervující'>" . esc_html($rez_name) . "</td>";
             echo "<td data-label='Součást střediska'>" . esc_html($oddil ?: '–') . "</td>";
             echo "<td data-label='Stav'>" . rs_stav_badge($stav) . "</td>";
             echo "</tr>";
