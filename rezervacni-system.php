@@ -543,9 +543,10 @@ function rs_notifikuj_nova(int $id) {
 
     $prehled = rs_rez_prehled_pole($prostor_id, $od_raw, $do_raw, $id);
     $admin_emaily = array_unique(array_merge(rs_spravci_emaily(), rs_notif_parse_emaily('rs_notif_cc_emaily')));
-    $html = rs_notif_nova_html($id, $label, $od, $do_, $prehled, $schvalit_url, rs_admin_url());
-    foreach ($admin_emaily as $se)
-        rs_mail_html($se, "Nová žádost o rezervaci – {$label}", $html, $email);
+    if (!empty($admin_emaily)) {
+        $html = rs_notif_nova_html($id, $label, $od, $do_, $prehled, $schvalit_url, rs_admin_url());
+        rs_mail_html(implode(', ', $admin_emaily), "Nová žádost o rezervaci – {$label}", $html, $email);
+    }
 }
 
 function rs_notifikuj_potvrzeni(int $id) {
