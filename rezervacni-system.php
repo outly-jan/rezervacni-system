@@ -587,14 +587,17 @@ function rs_notifikuj_zruseni(int $id) {
     $label      = rs_prostor_label($prostor_id, $seg_ids);
     $od         = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
     $do_        = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    $poznamka = get_post_meta($id, 'rs_spravce_poznamka', true);
     if (get_post_meta($id, 'rs_typ_rezervace', true) === 'interni') {
         $nazev = get_post_meta($id, 'rs_nazev', true);
         rs_mail($email, "Interní rezervace zrušena – {$label}",
-            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+            "Dobrý den,\n\nvaše interní rezervace" . ($nazev ? " \u{201E}{$nazev}\u{201D}" : '') . " objektu {$label} na termín {$od} – {$do_} byla zrušena."
+            . ($poznamka ? "\n\nVzkaz od správce:\n{$poznamka}" : '') . "\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     } else {
         rs_mail($email, "Rezervace zrušena – {$label}",
-            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla zrušena.\n\n" . rs_podpis(),
+            "Dobrý den,\n\nvaše rezervace objektu {$label} na termín {$od} – {$do_} byla zrušena."
+            . ($poznamka ? "\n\nVzkaz od správce:\n{$poznamka}" : '') . "\n\n" . rs_podpis(),
             get_option('rs_stredisko_kontakt_email', ''));
     }
 }
