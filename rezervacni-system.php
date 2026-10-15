@@ -720,7 +720,7 @@ function rs_css() { ?>
 .rs-warn{background:#fff8e1;border-color:#f57c00;color:#7a4100}
 .rs-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
 .rs-table th{background:#e8f2ea;color:#222;border:1px solid #b8d4be;padding:7px 10px;text-align:left;font-weight:600}
-.rs-table td{border:1px solid #ddd;padding:6px 10px;vertical-align:middle}
+.rs-table td{border:1px solid #ddd;padding:6px 10px;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word}
 .rs-table tr:nth-child(even) td{background:#f7f7f7}
 .rs-table tr:hover td{background:#edf4ea}
 .rs-form-group{margin-bottom:14px}
