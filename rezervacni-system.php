@@ -616,6 +616,35 @@ function rs_notifikuj_interni_cekajici(int $id) {
         get_option('rs_stredisko_kontakt_email', ''));
 }
 
+function rs_notifikuj_spravce_interni_cekajici(int $id) {
+    $admin_emaily = array_unique(array_merge(rs_spravci_emaily(), rs_notif_parse_emaily('rs_notif_cc_emaily')));
+    if (empty($admin_emaily)) return;
+    $pid    = (int)get_post_meta($id, 'rs_prostor_id', true);
+    $segs   = array_filter((array)get_post_meta($id, 'rs_segmenty_ids', true));
+    $label  = rs_prostor_label($pid, $segs);
+    $od     = rs_format_datum(get_post_meta($id, 'rs_datum_od', true));
+    $do_    = rs_format_datum(get_post_meta($id, 'rs_datum_do', true));
+    $nazev  = get_post_meta($id, 'rs_nazev', true);
+    $oddil  = get_post_meta($id, 'rs_oddil', true);
+    $pocet  = (int)get_post_meta($id, 'rs_pocet_lidi', true);
+    $rez_uid  = (int)get_post_meta($id, 'rs_int_rezervujici_id', true) ?: (int)get_post_meta($id, 'rs_wp_user_id', true);
+    $rez_user = $rez_uid ? get_userdata($rez_uid) : null;
+    $kdo    = $rez_user ? $rez_user->display_name : '–';
+    $body = "Dobrý den,\n\nbyla podána interní rezervace vyžadující vaše schválení.\n\n"
+        . "Objekt:      {$label}\n"
+        . "Termín:      {$od} – {$do_}\n"
+        . ($nazev ? "Akce:        {$nazev}\n" : '')
+        . ($oddil ? "Oddíl:       {$oddil}\n" : '')
+        . "Rezervoval: {$kdo}\n"
+        . "Počet osob: {$pocet}\n\n"
+        . "Termín připadá na víkend, státní svátek nebo prázdniny a vyžaduje schválení.\n\n"
+        . "Spravovat rezervaci:\n" . rs_admin_url() . "\n\n"
+        . rs_podpis();
+    foreach ($admin_emaily as $email) {
+        rs_mail($email, "Interní rezervace čeká na schválení – {$label}", $body);
+    }
+}
+
 function rs_notifikuj_znovu_zakaznikovi(int $id) {
     $email = rs_rez_get_email($id);
     if (!$email) return;
@@ -2668,7 +2697,10 @@ function rs_interni_zpracuj(string $action): string {
             update_post_meta($rid,'rs_nazev',$nazev);
             update_post_meta($rid,'rs_int_rezervujici_id',$rezervujici);
             update_post_meta($rid,'rs_oddil',$oddil);
-            if ($stav === 'cekajici') rs_notifikuj_interni_cekajici($rid);
+            if ($stav === 'cekajici') {
+                rs_notifikuj_interni_cekajici($rid);
+                rs_notifikuj_spravce_interni_cekajici($rid);
+            }
             return rs_alert('Rezervace vytvořena. ' . ($stav==='cekajici'
                 ? 'Termín připadá na víkend, státní svátek nebo školní prázdniny. Tyto termíny jsou primárně vyhrazeny pro placený pronájem veřejností, a proto vyžadují schválení správcem. V případě schválení bude pro oddíl zdarma. Potvrzení nebo zamítnutí vám přijde na e-mail.'
                 : 'Automaticky potvrzena.'));
@@ -2750,11 +2782,27 @@ function rs_interni_zpracuj(string $action): string {
             $uid_notif  = $rezervujici ?: $uid;
             $user_notif = get_userdata($uid_notif);
             $email_notif = $user_notif ? $user_notif->user_email : '';
+            $label_notif = rs_prostor_label($prostor_id, $seg_ids);
             if ($email_notif) {
-                $label_notif = rs_prostor_label($prostor_id, $seg_ids);
                 rs_mail($email_notif, "Interní rezervace série čekají na schválení – {$label_notif}",
                     "Dobrý den,\n\n{$n_cek} " . ($n_cek === 1 ? 'termín' : ($n_cek < 5 ? 'termíny' : 'termínů')) . ' z vaší série ' . ($nazev ? "\u{201E}{$nazev}\u{201D} " : '') . "objektu {$label_notif} čeká na schválení správcem (připadají na víkend, státní svátek nebo prázdniny).\n\nJakmile budou schváleny nebo zamítnuty, přijdou vám e-maily s výsledky.\n\n" . rs_podpis(),
                     get_option('rs_stredisko_kontakt_email', ''));
+            }
+            $admin_emaily_serie = array_unique(array_merge(rs_spravci_emaily(), rs_notif_parse_emaily('rs_notif_cc_emaily')));
+            if (!empty($admin_emaily_serie)) {
+                $kdo_serie = $user_notif ? $user_notif->display_name : '–';
+                $pocet_str = $n_cek === 1 ? '1 termín' : ($n_cek < 5 ? "{$n_cek} termíny" : "{$n_cek} termínů");
+                $body_serie = "Dobrý den,\n\nbyla podána interní série rezervací vyžadující vaše schválení.\n\n"
+                    . "Objekt:       {$label_notif}\n"
+                    . ($nazev ? "Akce:         {$nazev}\n" : '')
+                    . ($oddil ? "Oddíl:        {$oddil}\n" : '')
+                    . "Rezervoval:  {$kdo_serie}\n"
+                    . "Čeká na schválení: {$pocet_str} (připadají na víkend, svátek nebo prázdniny)\n\n"
+                    . "Spravovat rezervace:\n" . rs_admin_url() . "\n\n"
+                    . rs_podpis();
+                foreach ($admin_emaily_serie as $ae) {
+                    rs_mail($ae, "Interní série čeká na schválení – {$label_notif}", $body_serie);
+                }
             }
         }
         $msg = "Série vytvořena: {$created} rezervací (z " . count($dates) . " nalezených termínů).";
