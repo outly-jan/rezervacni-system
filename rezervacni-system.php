@@ -2941,7 +2941,7 @@ function rs_kalendar_sc(array $atts): string {
             $rez_uid  = (int)get_post_meta($r->ID,'rs_int_rezervujici_id',true) ?: (int)get_post_meta($r->ID,'rs_wp_user_id',true);
             $rez_user = get_userdata($rez_uid);
             $skupina  = get_post_meta($r->ID,'rs_skupina_id',true);
-            $detail['nazev']       = get_post_meta($r->ID,'rs_nazev',true);
+            $detail['nazev']       = $typ === 'externi' ? rs_rez_jmeno($r->ID) : get_post_meta($r->ID,'rs_nazev',true);
             $detail['rezervujici'] = $rez_user ? $rez_user->display_name : '';
             $detail['oddil']       = get_post_meta($r->ID,'rs_oddil',true);
             $detail['poznamka']    = get_post_meta($r->ID,'rs_poznamka',true);
@@ -4520,7 +4520,7 @@ function rs_sekce_prehled_kalendar(): string {
             'do'          => $r_do_ts ? ($multiday ? rs_format_datum(date('Y-m-d H:i:s', $r_do_ts)) : date('H:i', $r_do_ts)) : '',
             'typ'         => $typ,
             'stav'        => $r_stav,
-            'nazev'       => get_post_meta($r->ID,'rs_nazev',true),
+            'nazev'       => $typ === 'externi' ? rs_rez_jmeno($r->ID) : get_post_meta($r->ID,'rs_nazev',true),
             'rezervujici' => $rez_user ? $rez_user->display_name : '',
             'oddil'       => get_post_meta($r->ID,'rs_oddil',true),
             'poznamka'    => get_post_meta($r->ID,'rs_poznamka',true),
