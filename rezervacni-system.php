@@ -85,6 +85,13 @@ function rs_vypocti_velikonoce(int $rok): array {
 }
 
 function rs_je_vikend(string $d): bool    { return (int)date('N', strtotime($d)) >= 6; }
+function rs_kal_bunka_bg(int $dow, string $sv, string $pr): string {
+    if ($dow >= 6)     return 'background:#e4f0e6;';
+    if ($sv && $pr)    return 'background:#f8e7a8;';
+    if ($sv)           return 'background:#fcefbf;';
+    if ($pr)           return 'background:#dde9fb;';
+    return '';
+}
 function rs_je_svatek(string $d): bool {
     $date = substr($d, 0, 10);
     if (in_array(substr($date, 5), get_option('rs_statni_svatky', []), true)) return true;
@@ -3196,15 +3203,7 @@ function rs_kalendar_sc(array $atts): string {
                 $stav    = $busy[$tid][$d] ?? '';
                 $sv_name = $den_info[$d]['sv'];
                 $pr_name = $den_info[$d]['pr'];
-                if ($sv_name && $pr_name) {
-                    $bg = 'background:#fef9c3;';
-                } elseif ($sv_name) {
-                    $bg = 'background:#fefce8;';
-                } elseif ($pr_name) {
-                    $bg = 'background:#eff6ff;';
-                } else {
-                    $bg = '';
-                }
+                $bg = rs_kal_bunka_bg((int)date('N', mktime(0,0,0,$mesic,$d,$rok)), (string)$sv_name, (string)$pr_name);
                 $has_detail = !empty($kal_data[$tid][$d]);
                 $td_style   = ($has_detail ? 'cursor:pointer;position:relative;' : ($bg ? 'position:relative;' : '')) . $bg;
                 $click      = $has_detail ? " onclick='rsKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
@@ -4644,10 +4643,7 @@ function rs_sekce_prehled_kalendar(): string {
                 $stav    = $busy[$tid][$d] ?? '';
                 $sv_name = $den_info[$d]['sv'];
                 $pr_name = $den_info[$d]['pr'];
-                if ($sv_name && $pr_name)     { $bg = 'background:#fef9c3;'; }
-                elseif ($sv_name)              { $bg = 'background:#fefce8;'; }
-                elseif ($pr_name)              { $bg = 'background:#eff6ff;'; }
-                else                           { $bg = ''; }
+                $bg = rs_kal_bunka_bg((int)date('N', mktime(0,0,0,$mesic,$d,$rok)), (string)$sv_name, (string)$pr_name);
                 $has_detail = !empty($kal_data[$tid][$d]);
                 $td_style   = ($has_detail ? 'cursor:pointer;position:relative;' : ($bg ? 'position:relative;' : '')) . $bg;
                 $click      = $has_detail ? " onclick='rsPrehKalDetail(" . esc_js((string)$tid) . "," . $d . ",\"" . esc_js($item->post_title) . "\"," . $rok . "," . $mesic . ")'" : '';
