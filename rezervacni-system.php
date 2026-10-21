@@ -2884,6 +2884,7 @@ function rs_vytvor_rezervaci_post(int $prostor_id, array $seg_ids, string $od, s
 
 add_shortcode('rs_kalendar','rs_kalendar_sc');
 function rs_kalendar_sc(array $atts): string {
+    if (!defined('DONOTCACHEPAGE')) { define('DONOTCACHEPAGE', true); }
     $ob_level = ob_get_level();
     try {
     rs_css();
