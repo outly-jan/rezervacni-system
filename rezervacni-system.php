@@ -804,6 +804,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
 add_shortcode('rs_admin', 'rs_admin_sc');
 function rs_admin_sc(): string {
+    if (!defined('DONOTCACHEPAGE')) { define('DONOTCACHEPAGE', true); }
     if (!rs_ma_pravo('vedeni')) return '<p>Nemáš oprávnění k rezervačnímu systému.</p>';
     if (rs_ma_pravo('admin') || rs_ma_pravo('spravce')) wp_enqueue_media();
 
@@ -3495,6 +3496,7 @@ function rs_kalendar_sc(array $atts): string {
 
 add_shortcode('rs_formular','rs_formular_sc');
 function rs_formular_sc(): string {
+    if (!defined('DONOTCACHEPAGE')) { define('DONOTCACHEPAGE', true); }
     // Token-based management má přednost
     if (isset($_GET['rs_sprava'])) return rs_render_sprava_rezervace();
 
