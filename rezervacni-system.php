@@ -207,7 +207,7 @@ function rs_vypocti_cenu(int $prostor_id, array $seg_ids, int $pocet_lidi, strin
     // Use segment-level prices only when prostor has segments AND mode is 'segmenty' AND segments are specified
     $ids = ($ma_seg && $rezim === 'segmenty' && !empty($seg_ids)) ? $seg_ids : [$prostor_id];
 
-    $noci = max(1, (int)round((strtotime($do) - strtotime($od)) / 86400));
+    $noci = max(1, (int)(new DateTime(date('Y-m-d', strtotime($od))))->diff(new DateTime(date('Y-m-d', strtotime($do))))->days);
 
     $total = 0.0;
     foreach ($ids as $iid) {
